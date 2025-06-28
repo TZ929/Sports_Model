@@ -1,0 +1,111 @@
+# NBA/WNBA Predictive Model Configuration
+
+# Database Configuration
+database:
+  type: "sqlite"  # or "postgresql"
+  sqlite_path: "data/sports_model.db"
+  postgresql:
+    host: "localhost"
+    port: 5432
+    database: "sports_model"
+    username: ""
+    password: ""
+
+# Data Sources
+data_sources:
+  nba_api:
+    base_url: "https://stats.nba.com/stats/"
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json, text/plain, */*"
+      Accept-Language: "en-US,en;q=0.9"
+      Accept-Encoding: "gzip, deflate, br"
+      Connection: "keep-alive"
+  
+  basketball_reference:
+    base_url: "https://www.basketball-reference.com"
+    
+  sportsbooks:
+    fanduel:
+      base_url: "https://sportsbook.fanduel.com"
+      props_url: "https://sportsbook.fanduel.com/basketball/nba"
+    espnbet:
+      base_url: "https://www.espnbet.com"
+      props_url: "https://www.espnbet.com/sports/basketball/nba"
+
+# Web Scraping Settings
+scraping:
+  delay_between_requests: 2.0  # seconds
+  max_retries: 3
+  timeout: 30
+  user_agents:
+    - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    - "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+    - "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
+
+# Model Configuration
+modeling:
+  target_props:
+    - "points"
+    - "rebounds"
+    - "assists"
+    - "three_pointers"
+    - "points_rebounds_assists"
+  
+  feature_engineering:
+    rolling_windows: [3, 5, 10, 20]
+    season_averages: true
+    opponent_specific: true
+    team_context: true
+  
+  training:
+    test_size: 0.2
+    validation_size: 0.2
+    random_state: 42
+    cv_folds: 5
+    
+  hyperparameter_tuning:
+    n_iter: 100
+    cv: 5
+    
+  models:
+    baseline:
+      type: "logistic_regression"
+      params:
+        C: 1.0
+        max_iter: 1000
+        
+    primary:
+      type: "xgboost"
+      params:
+        n_estimators: 1000
+        learning_rate: 0.1
+        max_depth: 6
+        subsample: 0.8
+        colsample_bytree: 0.8
+        random_state: 42
+
+# Prediction Settings
+prediction:
+  value_threshold: 0.05  # Minimum edge required to place a bet
+  min_confidence: 0.55   # Minimum model confidence
+  max_bets_per_game: 5   # Maximum number of bets per game
+  
+# Evaluation Metrics
+evaluation:
+  target_accuracy: 0.55
+  target_roi: 0.05  # 5% ROI target
+  backtest_years: [2023, 2024]  # Years to use for backtesting
+
+# File Paths
+paths:
+  data_raw: "data/raw"
+  data_processed: "data/processed"
+  models: "data/models"
+  logs: "logs"
+  
+# Logging
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/sports_model.log" 
