@@ -81,4 +81,4 @@ This project is for educational and technical purposes only. It is not financial
 
 ## License
 
-MIT License 
+MIT License
