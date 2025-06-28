@@ -107,6 +107,19 @@ class BasketballReferenceCollector:
         logger.info(f"Retrieved {len(teams)} teams for {season}")
         return teams
     
+    def _normalize_team_name(self, team_name: str) -> str:
+        """Normalize team name for consistent mapping.
+        
+        Args:
+            team_name: Raw team name
+            
+        Returns:
+            Normalized team name
+        """
+        # Remove asterisks and extra whitespace
+        normalized = team_name.replace('*', '').strip()
+        return normalized
+    
     def get_players(self, season: str = "2024") -> List[Dict[str, Any]]:
         """Get all NBA players for a season.
         
@@ -116,19 +129,51 @@ class BasketballReferenceCollector:
         Returns:
             List of player dictionaries
         """
-        url = f"{self.base_url}/leagues/NBA_{season}_per_game.html"
+        # Try different approaches to get player data
+        players = []
+        
+        # Approach 1: Try the main league page with different table IDs
+        url = f"{self.base_url}/leagues/NBA_{season}.html"
         soup = self._make_request(url)
         
-        if not soup:
-            return []
+        if soup:
+            players = self._extract_players_from_page(soup, season)
         
+        # Approach 2: If no players found, try team pages
+        if not players:
+            logger.info("No players found on main page, trying team pages...")
+            players = self._get_players_from_team_pages(season)
+        
+        logger.info(f"Retrieved {len(players)} players for {season}")
+        return players
+    
+    def _extract_players_from_page(self, soup: BeautifulSoup, season: str) -> List[Dict[str, Any]]:
+        """Extract players from a page."""
         players = []
         
         try:
-            # Find the player stats table
-            table = soup.find('table', {'id': 'per_game_stats'})
+            # Try different common table IDs for player stats
+            table_ids = ['per_game_stats', 'stats_per_game', 'per_game', 'player_stats', 'stats']
+            table = None
+            
+            for table_id in table_ids:
+                table = soup.find('table', {'id': table_id})
+                if table:
+                    logger.info(f"Found player stats table with ID: {table_id}")
+                    break
+            
             if not table:
-                logger.warning("Player stats table not found")
+                # Try to find any table that might contain player data
+                tables = soup.find_all('table')
+                for t in tables:
+                    if t.find('tbody') and t.find('tbody').find_all('tr'):
+                        first_row = t.find('tbody').find_all('tr')[0]
+                        if first_row.find('a'):  # Has links, might be player data
+                            table = t
+                            logger.info("Found potential player table")
+                            break
+            
+            if not table:
                 return []
             
             rows = table.find('tbody').find_all('tr')
@@ -146,7 +191,15 @@ class BasketballReferenceCollector:
                 name_cell = cells[0]
                 player_name = name_cell.get_text(strip=True)
                 player_link = name_cell.find('a')
-                player_id = player_link['href'].split('/')[-1].replace('.html', '') if player_link else None
+                
+                # Only add players with valid links (skip summary rows, etc.)
+                if not player_link or not player_link.get('href'):
+                    continue
+                
+                # Extract correct player ID from href
+                href = player_link.get('href')
+                # Extract player ID from URL like /players/j/jamesle01.html
+                player_id = href.split('/')[-1].replace('.html', '')
                 
                 # Get team
                 team = cells[1].get_text(strip=True) if len(cells) > 1 else "Unknown"
@@ -155,7 +208,7 @@ class BasketballReferenceCollector:
                 position = cells[2].get_text(strip=True) if len(cells) > 2 else "Unknown"
                 
                 player = {
-                    'player_id': player_id or f"BR_{player_name.replace(' ', '_')}",
+                    'player_id': player_id,
                     'full_name': player_name,
                     'team_name': team,
                     'position': position,
@@ -166,11 +219,35 @@ class BasketballReferenceCollector:
         except Exception as e:
             logger.error(f"Error parsing players: {e}")
         
-        logger.info(f"Retrieved {len(players)} players for {season}")
+        return players
+    
+    def _get_players_from_team_pages(self, season: str) -> List[Dict[str, Any]]:
+        """Get players by visiting individual team pages."""
+        players = []
+        
+        # Get teams first
+        teams = self.get_teams(season)
+        
+        for team in teams[:5]:  # Limit to first 5 teams for testing
+            try:
+                team_abbr = team['team_abbreviation']
+                url = f"{self.base_url}/teams/{team_abbr}/{season}.html"
+                soup = self._make_request(url)
+                
+                if soup:
+                    team_players = self._extract_players_from_page(soup, season)
+                    for player in team_players:
+                        player['team_name'] = team['team_name']
+                    players.extend(team_players)
+                    
+            except Exception as e:
+                logger.error(f"Error getting players for team {team['team_name']}: {e}")
+                continue
+        
         return players
     
     def get_games(self, season: str = "2024") -> List[Dict[str, Any]]:
-        """Get all games for a season.
+        """Get all NBA games for a season.
         
         Args:
             season: NBA season (e.g., "2024" for 2023-24 season)
@@ -355,6 +432,9 @@ class BasketballReferenceCollector:
         teams = self.get_teams(season)
         counts['teams'] = len(teams)
         
+        # Create team name to ID mapping (normalized)
+        team_mapping = {self._normalize_team_name(team['team_name']): team['team_id'] for team in teams}
+        
         # Collect players
         players = self.get_players(season)
         counts['players'] = len(players)
@@ -366,14 +446,40 @@ class BasketballReferenceCollector:
         # Save to database if requested
         if save_to_db:
             for team in teams:
-                # Convert to database format
                 team_data = {
                     'team_id': team['team_id'],
                     'team_name': team['team_name'],
-                    'team_abbreviation': team['team_abbreviation']
+                    'team_abbreviation': team['team_abbreviation'],
+                    'league': 'NBA'
                 }
-                # Note: Would need to adapt to our database schema
-                logger.info(f"Would save team: {team_data}")
+                db_manager.insert_team(team_data)
+            
+            for player in players:
+                player_data = {
+                    'player_id': player['player_id'],
+                    'full_name': player['full_name'],
+                    'team_id': team_mapping.get(self._normalize_team_name(player.get('team_name', '')), None),
+                    'team_name': player.get('team_name', None),
+                    'position': player.get('position', None),
+                    'league': 'NBA',
+                    'active': True
+                }
+                db_manager.insert_player(player_data)
+            
+            for game in games:
+                game_data = {
+                    'game_id': game['game_id'],
+                    'date': game['date'],
+                    'home_team_id': team_mapping.get(self._normalize_team_name(game['home_team_name']), None),
+                    'away_team_id': team_mapping.get(self._normalize_team_name(game['away_team_name']), None),
+                    'home_team_name': game['home_team_name'],
+                    'away_team_name': game['away_team_name'],
+                    'home_score': game['home_score'],
+                    'away_score': game['away_score'],
+                    'season': game['season'],
+                    'league': game.get('league', 'NBA')
+                }
+                db_manager.insert_game(game_data)
         
         logger.info(f"Basketball Reference data collection completed for {season}: {counts}")
         return counts

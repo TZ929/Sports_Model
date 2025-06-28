@@ -5,137 +5,116 @@ Main script for the NBA/WNBA predictive model project.
 import logging
 import argparse
 from pathlib import Path
+import click
 
 from src.utils.config import config
 from src.utils.database import db_manager
 
-# Set up logging
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('logs/sports_model.log', encoding='utf-8'),
-        logging.StreamHandler()
-    ]
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-
 logger = logging.getLogger(__name__)
 
+@click.group()
+def cli():
+    """Sports Model CLI for NBA/WNBA predictive modeling."""
+    pass
 
-def collect_data():
-    """Collect historical and live data."""
+@cli.command()
+@click.option('--source', default='basketball-reference', 
+              type=click.Choice(['basketball-reference', 'espn']),
+              help='Data source to use')
+def collect(source):
+    """Collect NBA data from various sources."""
     logger.info("Starting data collection...")
     
-    try:
-        # Try Basketball Reference first (more reliable)
+    if source == 'basketball-reference':
+        # Use Basketball Reference
         from src.data_collection.basketball_reference import BasketballReferenceCollector
-        
         collector = BasketballReferenceCollector()
-        
-        # Collect recent season data
-        counts = collector.collect_season_data("2024", save_to_db=True)
-        
-        logger.info(f"Data collection completed: {counts}")
-        return True
-        
-    except ImportError:
-        logger.warning("Basketball Reference collector not available, trying NBA API...")
-        try:
-            from src.data_collection.nba_api import NBADataCollector
-            
-            collector = NBADataCollector()
-            
-            # Collect recent season data
-            counts = collector.collect_season_data("2023-24", save_to_db=True)
-            
-            logger.info(f"Data collection completed: {counts}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error in data collection: {e}")
-            return False
-    except Exception as e:
-        logger.error(f"Error in data collection: {e}")
-        return False
+        basic_counts = collector.collect_season_data("2024", save_to_db=True)
+    elif source == 'espn':
+        # Use ESPN API
+        from src.data_collection.espn_api import ESPNAPICollector
+        collector = ESPNAPICollector()
+        basic_counts = collector.collect_season_data("2024", save_to_db=True)
+    
+    logger.info(f"Basic data collection completed: {basic_counts}")
+    
+    # Collect player game statistics
+    logger.info("Starting player game statistics collection...")
+    from src.data_collection.player_stats_collector import PlayerStatsCollector
+    stats_collector = PlayerStatsCollector()
+    
+    # Get player IDs from database instead of hardcoded ones
+    player_stats_result = stats_collector.collect_player_stats_batch(
+        player_ids=None,  # This will get IDs from database
+        season="2024",
+        save_to_db=True,
+        limit=5  # Start with 5 players for testing
+    )
+    
+    logger.info(f"Player stats collection completed: {player_stats_result}")
+    
+    # Update final counts
+    final_counts = {
+        **basic_counts,
+        'player_stats_collected': player_stats_result['total_games'],
+        'players_with_stats': player_stats_result['successful_players']
+    }
+    
+    logger.info(f"Data collection completed successfully!")
+    logger.info(f"Final counts: {final_counts}")
 
-
-def scrape_odds():
-    """Scrape current prop odds."""
+@cli.command()
+def scrape():
+    """Scrape live betting odds."""
     logger.info("Starting odds scraping...")
     
     try:
-        from src.data_collection.sportsbook_scraper import scrape_all_sportsbooks
+        from src.data_collection.sportsbook_scraper import SportsbookScraper
         
-        results = scrape_all_sportsbooks()
+        scraper = SportsbookScraper()
+        odds = scraper.scrape_all_sportsbooks()
         
-        total_props = sum(len(props) for props in results.values())
-        logger.info(f"Odds scraping completed: {total_props} total props")
-        
+        logger.info(f"Odds scraping completed: {len(odds)} odds collected")
         return True
         
     except Exception as e:
         logger.error(f"Error in odds scraping: {e}")
         return False
 
-
-def train_models():
+@cli.command()
+def train():
     """Train predictive models."""
     logger.info("Starting model training...")
     
-    # This will be implemented in the modeling module
-    logger.info("Model training not yet implemented")
-    return True
+    try:
+        # Import and run model training
+        # This will be implemented in Phase 3
+        logger.info("Model training not yet implemented (Phase 3)")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error in model training: {e}")
+        return False
 
-
-def make_predictions():
-    """Make predictions for today's games."""
+@cli.command()
+def predict():
+    """Make predictions and identify value bets."""
     logger.info("Starting predictions...")
     
-    # This will be implemented in the prediction module
-    logger.info("Predictions not yet implemented")
-    return True
-
-
-def main():
-    """Main function."""
-    parser = argparse.ArgumentParser(description="NBA/WNBA Predictive Model")
-    parser.add_argument(
-        "action",
-        choices=["collect", "scrape", "train", "predict", "all"],
-        help="Action to perform"
-    )
-    parser.add_argument(
-        "--headless",
-        action="store_true",
-        help="Run scrapers in headless mode"
-    )
-    
-    args = parser.parse_args()
-    
-    logger.info(f"Starting NBA/WNBA Predictive Model - Action: {args.action}")
-    
-    success = True
-    
-    if args.action == "collect":
-        success = collect_data()
-    elif args.action == "scrape":
-        success = scrape_odds()
-    elif args.action == "train":
-        success = train_models()
-    elif args.action == "predict":
-        success = make_predictions()
-    elif args.action == "all":
-        # Run all steps
-        success = collect_data() and scrape_odds() and train_models() and make_predictions()
-    
-    if success:
-        logger.info("Operation completed successfully!")
-    else:
-        logger.error("Operation failed!")
-        return 1
-    
-    return 0
-
+    try:
+        # Import and run predictions
+        # This will be implemented in Phase 3
+        logger.info("Predictions not yet implemented (Phase 3)")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error in predictions: {e}")
+        return False
 
 if __name__ == "__main__":
-    exit(main()) 
+    cli() 
