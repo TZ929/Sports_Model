@@ -141,6 +141,18 @@ class BetRecommendations(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class Teams(Base):
+    """Teams table to store team information."""
+    __tablename__ = 'teams'
+    
+    team_id = Column(String(10), primary_key=True)
+    team_name = Column(String(50), nullable=False)
+    team_abbreviation = Column(String(10), nullable=False)
+    league = Column(String(10), default='NBA')
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class DatabaseManager:
     """Database manager for the sports model."""
     
@@ -306,6 +318,42 @@ class DatabaseManager:
     def _row_to_dict(self, row) -> Dict:
         """Convert SQLAlchemy row to dictionary."""
         return {column.name: getattr(row, column.name) for column in row.__table__.columns}
+
+    def insert_team(self, team_data: Dict[str, Any]) -> bool:
+        """Insert a new team record.
+        Args:
+            team_data: Dictionary containing team information
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            with self.get_session() as session:
+                team = Teams(**team_data)
+                session.add(team)
+                session.commit()
+                logger.info(f"Team inserted: {team_data.get('team_id')}")
+                return True
+        except Exception as e:
+            logger.error(f"Failed to insert team: {e}")
+            return False
+
+    def insert_player(self, player_data: Dict[str, Any]) -> bool:
+        """Insert a new player record.
+        Args:
+            player_data: Dictionary containing player information
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            with self.get_session() as session:
+                player = Players(**player_data)
+                session.add(player)
+                session.commit()
+                logger.info(f"Player inserted: {player_data.get('player_id')}")
+                return True
+        except Exception as e:
+            logger.error(f"Failed to insert player: {e}")
+            return False
 
 
 # Global database manager instance
