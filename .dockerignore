@@ -1,0 +1,30 @@
+# Git files
+.git
+.gitignore
+
+# Python specific
+*.pyc
+__pycache__/
+.venv/
+*.egg-info/
+
+# Docker specific
+Dockerfile
+
+# IDE/Editor specific
+.idea/
+.vscode/
+
+# Logs
+logs/
+
+# Test artifacts
+.pytest_cache/
+coverage.xml
+
+# Data files
+data/
+analysis_results/
+notebooks/
+*.json
+*.md 
