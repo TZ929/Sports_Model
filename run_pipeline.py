@@ -1,5 +1,11 @@
 import logging
 import pandas as pd
+import sys
+from pathlib import Path
+
+# Add project root to the Python path
+sys.path.append(str(Path(__file__).resolve().parents[0]))
+
 from src.utils.database import db_manager
 from src.preprocessing.data_cleaner import DataCleaner
 from src.preprocessing.data_validator import DataValidator
@@ -7,9 +13,10 @@ from src.preprocessing.data_integrator import DataIntegrator
 from src.feature_engineering.player_features import PlayerFeatures
 from src.feature_engineering.game_features import GameFeatures
 from src.feature_engineering.team_features import TeamFeatures
+from src.data_collection.sportsbook_scraper import scrape_all_sportsbooks
 from src.utils.config import config
 from sqlalchemy import text
-from typing import Dict
+from typing import Dict, List, Any
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -25,16 +32,39 @@ def load_data_from_db() -> Dict[str, pd.DataFrame]:
     logger.info(f"Loaded {len(games_df)} games and {len(stats_df)} player stats records.")
     return {'games': games_df, 'player_stats': stats_df}
 
+def integrate_sportsbook_odds(features_df: pd.DataFrame, odds_data: Dict[str, List[Dict[str, Any]]]) -> pd.DataFrame:
+    """
+    Integrates sportsbook odds into the features DataFrame.
+    This is a placeholder and needs a robust implementation to match players and games.
+    """
+    logger.info("Integrating sportsbook odds...")
+    # This is a complex task. For now, we will just log a message.
+    # A real implementation would require matching player names, teams, and game dates
+    # between our database and the scraped data. It would also involve handling
+    # different prop bet types (e.g., points, rebounds).
+    
+    # For now, let's assume we can extract a 'points_over_under_odds' column.
+    # This is a placeholder for the real logic.
+    if not features_df.empty:
+        features_df['fanduel_points_over_odds'] = -110  # Placeholder value
+        features_df['fanduel_points_under_odds'] = -110 # Placeholder value
+
+    logger.info("Sportsbook odds integration placeholder complete.")
+    return features_df
+
 def run_pipeline():
     """
     Executes the full data processing and feature engineering pipeline.
     """
     logger.info("Starting data pipeline...")
 
-    # 1. Load data
+    # 1. Scrape Sportsbook Odds
+    odds_data = scrape_all_sportsbooks()
+
+    # 2. Load data
     dataframes = load_data_from_db()
     
-    # 2. Preprocessing
+    # 3. Preprocessing
     cleaner = DataCleaner(config.get('preprocessing.cleaning', {}))
     validator = DataValidator(config.get('preprocessing.validation', {}))
     integrator = DataIntegrator(config.get('preprocessing.integration', {}))
@@ -46,7 +76,7 @@ def run_pipeline():
 
     integrated_df = integrator.integrate_game_data(cleaned_stats, dataframes['games'])
     
-    # 3. Feature Engineering
+    # 4. Feature Engineering
     player_feature_creator = PlayerFeatures(config.get('feature_engineering.player_features', {}))
     game_feature_creator = GameFeatures(config.get('feature_engineering.game_features', {}))
     team_feature_creator = TeamFeatures(config.get('feature_engineering.team_features', {}))
@@ -55,7 +85,10 @@ def run_pipeline():
     features_df = game_feature_creator.create_game_context_features(features_df)
     features_df = team_feature_creator.create_team_strength_features(features_df)
 
-    # 4. Save processed data
+    # 5. Integrate Sportsbook Odds
+    features_df = integrate_sportsbook_odds(features_df, odds_data)
+
+    # 6. Save processed data
     output_path = config.get_data_path('processed') / 'featured_data.csv'
     features_df.to_csv(output_path, index=False)
     logger.info(f"Pipeline complete. Processed data saved to {output_path}")

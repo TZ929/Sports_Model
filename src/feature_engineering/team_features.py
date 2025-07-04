@@ -1,6 +1,7 @@
 import pandas as pd
 import logging
 from pathlib import Path
+from typing import Dict, Any
 
 # Setup logging
 log_dir = Path("logs")
@@ -14,6 +15,52 @@ logging.basicConfig(
     ]
 )
 
+class TeamFeatures:
+    def __init__(self, config: Dict[str, Any]):
+        self.config = config
+        self.stats_to_average = self.config.get('stats_to_average', ['points_for', 'points_against'])
+        self.rolling_windows = self.config.get('rolling_windows', [3, 5, 10])
+
+    def create_team_strength_features(self, integrated_df: pd.DataFrame) -> pd.DataFrame:
+        """Create team-level features."""
+        logging.info("Creating team-level strength features...")
+
+        if 'date' not in integrated_df.columns:
+            logging.error("The 'date' column is missing from the input DataFrame.")
+            return integrated_df
+
+        # Ensure games are sorted by date
+        games_df = integrated_df.sort_values(by='date')
+
+        # Create a DataFrame with one row per team per game
+        home_teams = games_df[['game_id', 'date', 'home_team_id', 'home_score', 'away_score']].rename(
+            columns={'home_team_id': 'team_id', 'home_score': 'points_for', 'away_score': 'points_against'}
+        )
+        away_teams = games_df[['game_id', 'date', 'away_team_id', 'home_score', 'away_score']].rename(
+            columns={'away_team_id': 'team_id', 'away_score': 'points_for', 'home_score': 'points_against'}
+        )
+        
+        team_game_stats = pd.concat([home_teams, away_teams]).sort_values(by=['team_id', 'date'])
+        
+        # Calculate rolling averages for team stats
+        for stat in self.stats_to_average:
+            for window in self.rolling_windows:
+                col_name = f'team_{stat}_roll_avg_{window}g'
+                team_game_stats[col_name] = team_game_stats.groupby('team_id')[stat].transform(
+                    lambda x: x.shift(1).rolling(window, min_periods=1).mean()
+                )
+
+        # Merge these team features back into the main DataFrame
+        home_features = team_game_stats.rename(columns={'team_id': 'home_team_id'})
+        away_features = team_game_stats.rename(columns={'team_id': 'away_team_id'})
+        
+        final_df = integrated_df.merge(home_features, on=['game_id', 'date', 'home_team_id'], how='left')
+        final_df = final_df.merge(away_features, on=['game_id', 'date', 'away_team_id'], how='left')
+        
+        logging.info("Finished creating team-level features.")
+        return final_df
+
+# Standalone execution logic
 def load_master_dataset():
     """Load the master feature dataset."""
     logging.info("Loading master feature dataset...")
@@ -26,64 +73,13 @@ def load_master_dataset():
         logging.error(f"Error loading master dataset: {e}. Please ensure previous steps ran successfully.")
         return None
 
-def create_team_features(games_df):
-    """Create team-level features."""
-    logging.info("Creating team-level features...")
-
-    # Ensure games are sorted by date
-    games_df = games_df.sort_values(by='date')
-
-    # Create a DataFrame with one row per team per game
-    home_teams = games_df[['game_id', 'date', 'home_team_id', 'home_score', 'away_score']].rename(
-        columns={'home_team_id': 'team_id', 'home_score': 'points_for', 'away_score': 'points_against'}
-    )
-    away_teams = games_df[['game_id', 'date', 'away_team_id', 'home_score', 'away_score']].rename(
-        columns={'away_team_id': 'team_id', 'away_score': 'points_for', 'home_score': 'points_against'}
-    )
-    
-    team_game_stats = pd.concat([home_teams, away_teams]).sort_values(by=['team_id', 'date'])
-    
-    # Calculate rolling averages for team stats
-    stats_to_average = ['points_for', 'points_against']
-    rolling_windows = [3, 5, 10]
-
-    for stat in stats_to_average:
-        for window in rolling_windows:
-            col_name = f'team_{stat}_roll_avg_{window}g'
-            team_game_stats[col_name] = team_game_stats.groupby('team_id')[stat].transform(
-                lambda x: x.shift(1).rolling(window, min_periods=1).mean()
-            )
-
-    logging.info("Finished creating team-level features.")
-    return team_game_stats
-
 if __name__ == '__main__':
     master_df = load_master_dataset()
     
     if master_df is not None:
-        # Create a unique games dataframe to avoid duplicate calculations
-        games_unique_df = master_df[['game_id', 'date', 'home_team_id', 'away_team_id', 'home_score', 'away_score']].drop_duplicates()
-        team_features_df = create_team_features(games_unique_df)
+        feature_creator = TeamFeatures(config={})
+        team_features_df = feature_creator.create_team_strength_features(master_df)
         
-        # --- Corrected Merge Logic ---
-        
-        # 1. Prepare home team features
-        home_features = team_features_df.copy()
-        home_features = home_features.rename(columns={'team_id': 'home_team_id'})
-        home_feature_cols = {col: f'home_{col}' for col in home_features.columns if col not in ['game_id', 'date', 'home_team_id']}
-        home_features = home_features.rename(columns=home_feature_cols)
-
-        # 2. Prepare away team features
-        away_features = team_features_df.copy()
-        away_features = away_features.rename(columns={'team_id': 'away_team_id'})
-        away_feature_cols = {col: f'away_{col}' for col in away_features.columns if col not in ['game_id', 'date', 'away_team_id']}
-        away_features = away_features.rename(columns=away_feature_cols)
-
-        # 3. Merge back to the master dataframe
-        final_df = pd.merge(master_df, home_features, on=['game_id', 'date', 'home_team_id'], how='left')
-        final_df = pd.merge(final_df, away_features, on=['game_id', 'date', 'away_team_id'], how='left')
-        
-        # Save final dataset
         output_dir = Path("data/processed")
-        final_df.to_csv(output_dir / "master_feature_dataset_v2.csv", index=False)
+        team_features_df.to_csv(output_dir / "master_feature_dataset_v2.csv", index=False)
         logging.info(f"Master feature dataset with team features saved to {output_dir / 'master_feature_dataset_v2.csv'}") 

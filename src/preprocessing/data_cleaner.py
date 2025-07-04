@@ -2,6 +2,7 @@ import pandas as pd
 from src.utils.database import db_manager, Teams, Players, Games, PlayerGameStats
 import logging
 from pathlib import Path
+from typing import Dict, Any
 
 # Setup logging
 log_dir = Path("logs")
@@ -15,6 +16,68 @@ logging.basicConfig(
     ]
 )
 
+class DataCleaner:
+    def __init__(self, config: Dict[str, Any]):
+        self.config = config
+
+    def clean_player_game_stats(self, player_stats_df: pd.DataFrame) -> pd.DataFrame:
+        """Cleans the player game stats DataFrame."""
+        logging.info("Cleaning player stats data...")
+        # Example cleaning step:
+        player_stats_df['defensive_rebounds'] = player_stats_df['rebounds'] - player_stats_df['offensive_rebounds']
+        
+        # Drop timestamps
+        for col in ['created_at', 'updated_at']:
+            if col in player_stats_df.columns:
+                player_stats_df = player_stats_df.drop(columns=col)
+                
+        logging.info("Player game stats cleaning complete.")
+        return player_stats_df
+
+    def clean_all_data(self, teams_df, players_df, games_df, player_stats_df):
+        """Clean all dataframes."""
+        logging.info("Starting data cleaning...")
+
+        # --- Clean Teams Data ---
+        logging.info("Cleaning teams data...")
+        teams_df['team_name'] = teams_df['team_name'].str.replace('*', '', regex=False)
+        
+        # --- Clean Players Data ---
+        logging.info("Cleaning players data...")
+        players_df = players_df[~players_df['full_name'].str.contains('Celtics', na=False)].copy()
+        
+        team_name_map = {}
+        for _, row in teams_df.iterrows():
+            team_name_map[row['team_name']] = row['team_id']
+            nickname = row['team_name'].split(' ')[-1]
+            team_name_map[nickname] = row['team_id']
+
+        team_name_map.update({
+            'Nets': 'BKN', 'Hornets': 'CHA', 'Warriors': 'GSW', 'Pelicans': 'NOP',
+            'Knicks': 'NYK', 'Suns': 'PHX', 'Spurs': 'SAS', 'Jazz': 'UTA', 'Wizards': 'WAS'
+        })
+        
+        players_df['team_id'] = players_df['team_name'].map(team_name_map)
+
+        unmapped_players = players_df[players_df['team_id'].isnull()]
+        if not unmapped_players.empty:
+            logging.warning(f"Could not map team_id for {len(unmapped_players)} players.")
+
+        players_df = players_df.drop(columns=['team_name', 'height', 'weight', 'birth_date'])
+
+        # --- Clean Player Stats Data ---
+        player_stats_df = self.clean_player_game_stats(player_stats_df)
+
+        # --- General Cleaning (drop timestamps) ---
+        logging.info("Dropping timestamp columns...")
+        for df in [teams_df, players_df, games_df]:
+            for col in ['created_at', 'updated_at']:
+                if col in df.columns:
+                    df.drop(columns=col, inplace=True)
+
+        logging.info("Data cleaning complete.")
+        return teams_df, players_df, games_df, player_stats_df
+
 def load_data_from_db():
     """Load all tables from the database into pandas DataFrames."""
     logging.info("Loading data from database...")
@@ -25,63 +88,6 @@ def load_data_from_db():
         games_df = pd.read_sql_table(Games.__tablename__, connection)
         player_stats_df = pd.read_sql_table(PlayerGameStats.__tablename__, connection)
     logging.info("Data loaded successfully.")
-    return teams_df, players_df, games_df, player_stats_df
-
-def clean_data(teams_df, players_df, games_df, player_stats_df):
-    """Clean the dataframes."""
-    logging.info("Starting data cleaning...")
-
-    # --- Clean Teams Data ---
-    logging.info("Cleaning teams data...")
-    teams_df['team_name'] = teams_df['team_name'].str.replace('*', '', regex=False)
-    
-    # --- Clean Players Data ---
-    logging.info("Cleaning players data...")
-    # Remove invalid player record
-    players_df = players_df[~players_df['full_name'].str.contains('Celtics', na=False)].copy()
-    
-    # Create a more robust team name to team_id mapping
-    team_name_map = {}
-    for _, row in teams_df.iterrows():
-        # Map full name
-        team_name_map[row['team_name']] = row['team_id']
-        # Map nickname (last word of the name)
-        nickname = row['team_name'].split(' ')[-1]
-        team_name_map[nickname] = row['team_id']
-
-    # Manual corrections for inconsistencies
-    team_name_map['Nets'] = 'BKN'
-    team_name_map['Hornets'] = 'CHA'
-    team_name_map['Warriors'] = 'GSW'
-    team_name_map['Pelicans'] = 'NOP'
-    team_name_map['Knicks'] = 'NYK'
-    team_name_map['Suns'] = 'PHX'
-    team_name_map['Spurs'] = 'SAS'
-    team_name_map['Jazz'] = 'UTA'
-    team_name_map['Wizards'] = 'WAS'
-    
-    players_df.loc[:, 'team_id'] = players_df['team_name'].map(team_name_map)
-
-    unmapped_players = players_df[players_df['team_id'].isnull()]
-    if not unmapped_players.empty:
-        logging.warning(f"Could not map team_id for {len(unmapped_players)} players:")
-        logging.warning(unmapped_players[['player_id', 'full_name', 'team_name']].to_string())
-
-    # Drop unnecessary columns from players
-    players_df = players_df.drop(columns=['team_name', 'height', 'weight', 'birth_date'])
-
-    # --- Clean Player Stats Data ---
-    logging.info("Cleaning player stats data...")
-    player_stats_df['defensive_rebounds'] = player_stats_df['rebounds'] - player_stats_df['offensive_rebounds']
-
-    # --- General Cleaning (drop timestamps) ---
-    logging.info("Dropping timestamp columns...")
-    for df in [teams_df, players_df, games_df, player_stats_df]:
-        for col in ['created_at', 'updated_at']:
-            if col in df.columns:
-                df.drop(columns=col, inplace=True)
-
-    logging.info("Data cleaning complete.")
     return teams_df, players_df, games_df, player_stats_df
 
 def save_cleaned_data(teams_df, players_df, games_df, player_stats_df):
@@ -99,6 +105,7 @@ def save_cleaned_data(teams_df, players_df, games_df, player_stats_df):
 
 if __name__ == '__main__':
     teams, players, games, player_stats = load_data_from_db()
-    teams_c, players_c, games_c, player_stats_c = clean_data(teams, players, games, player_stats)
+    cleaner = DataCleaner(config={})  # Add a dummy config for now
+    teams_c, players_c, games_c, player_stats_c = cleaner.clean_all_data(teams, players, games, player_stats)
     save_cleaned_data(teams_c, players_c, games_c, player_stats_c)
     logging.info("Data cleaning process finished.") 
