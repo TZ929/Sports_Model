@@ -1,83 +1,69 @@
-import logging
 import pandas as pd
-from typing import List, Dict, Any
+import logging
+from pathlib import Path
 
-logger = logging.getLogger(__name__)
+# Setup logging (can be shared across modules)
+log_dir = Path("logs")
+log_dir.mkdir(exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_dir / "feature_engineering.log"),
+        logging.StreamHandler()
+    ]
+)
 
-class PlayerFeatures:
-    """Creates player-centric features for modeling."""
+def load_processed_data():
+    """Load processed data from CSV files."""
+    logging.info("Loading processed data from CSV files...")
+    processed_dir = Path("data/processed")
+    
+    try:
+        players_df = pd.read_csv(processed_dir / "players_cleaned.csv")
+        player_stats_df = pd.read_csv(processed_dir / "player_stats_cleaned.csv")
+        game_features_df = pd.read_csv(processed_dir / "game_features.csv", parse_dates=['date'])
+        logging.info("Processed data loaded successfully.")
+        return players_df, player_stats_df, game_features_df
+    except FileNotFoundError as e:
+        logging.error(f"Error loading processed data: {e}. Please ensure previous steps ran successfully.")
+        return None, None, None
 
-    def __init__(self, config: Dict[str, Any]):
-        """
-        Initializes the PlayerFeatures class.
-        
-        Args:
-            config: Configuration dictionary for feature engineering parameters.
-        """
-        self.config = config
-
-    def create_rolling_averages(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Creates rolling average features for player stats.
-        
-        Args:
-            df: DataFrame with player game stats.
-            
-        Returns:
-            DataFrame with added rolling average features.
-        """
-        logger.info("Creating rolling average features...")
-        
-        rolling_windows = self.config.get('rolling_windows', [])
-        stats_to_average = self.config.get('stats_to_average', [])
-        
-        if not rolling_windows or not stats_to_average:
-            logger.warning("Rolling windows or stats to average not configured. Skipping.")
-            return df
-            
-        # Ensure data is sorted by date for rolling calculations
-        df = df.sort_values(by=['player_id', 'date'])
-        
+def create_player_features(player_stats_df, games_df):
+    """Create player-level features, like rolling averages."""
+    logging.info("Creating player-level features...")
+    
+    # Merge stats with games to get dates
+    player_game_stats = pd.merge(player_stats_df, games_df[['game_id', 'date']], on='game_id')
+    player_game_stats = player_game_stats.sort_values(by=['player_id', 'date'])
+    
+    # Calculate rolling averages
+    stats_to_average = ['points', 'rebounds', 'assists', 'steals', 'blocks', 'turnovers']
+    rolling_windows = [3, 5, 10]
+    
+    for stat in stats_to_average:
         for window in rolling_windows:
-            for stat in stats_to_average:
-                if stat in df.columns:
-                    col_name = f'{stat}_rolling_avg_{window}'
-                    # Group by player, then calculate rolling average
-                    df[col_name] = df.groupby('player_id')[stat].transform(
-                        lambda x: x.rolling(window=window, min_periods=1).mean()
-                    )
+            col_name = f'{stat}_roll_avg_{window}g'
+            player_game_stats[col_name] = player_game_stats.groupby('player_id')[stat].transform(
+                lambda x: x.shift(1).rolling(window, min_periods=1).mean()
+            )
+            
+    logging.info("Finished creating player-level features.")
+    logging.info(f"\nSample of player features:\n{player_game_stats.head().to_string()}")
+    
+    return player_game_stats
+
+
+if __name__ == '__main__':
+    players, player_stats, game_features = load_processed_data()
+    
+    if player_stats is not None and game_features is not None:
+        player_features_df = create_player_features(player_stats, game_features)
         
-        logger.info(f"Created rolling averages for {stats_to_average} with windows {rolling_windows}.")
-        return df
-
-def main():
-    """
-    Main function to test the PlayerFeatures class.
-    This is for demonstration purposes.
-    """
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-    # Example DataFrame
-    data = {
-        'player_id': [1, 1, 1, 1, 2, 2, 2, 2],
-        'date': pd.to_datetime(['2023-10-25', '2023-10-26', '2023-10-28', '2023-10-30', 
-                                '2023-10-25', '2023-10-27', '2023-10-29', '2023-10-31']),
-        'points': [10, 15, 12, 18, 20, 22, 25, 28],
-        'rebounds': [5, 7, 6, 8, 10, 11, 12, 13]
-    }
-    df = pd.DataFrame(data)
-    
-    # Example feature engineering config
-    config = {
-        'rolling_windows': [2, 4],
-        'stats_to_average': ['points', 'rebounds']
-    }
-    
-    feature_creator = PlayerFeatures(config)
-    features_df = feature_creator.create_rolling_averages(df)
-    
-    logger.info("DataFrame with player features:")
-    logger.info(features_df)
-
-if __name__ == "__main__":
-    main() 
+        # Merge with game features
+        final_df = pd.merge(game_features, player_features_df, on=['game_id', 'date'], how='left')
+        
+        # Save final dataset
+        output_dir = Path("data/processed")
+        final_df.to_csv(output_dir / "master_feature_dataset.csv", index=False)
+        logging.info(f"Master feature dataset saved to {output_dir / 'master_feature_dataset.csv'}") 
