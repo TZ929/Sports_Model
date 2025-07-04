@@ -51,12 +51,20 @@ class TeamFeatures:
                 )
 
         # Merge these team features back into the main DataFrame
-        home_features = team_game_stats.rename(columns={'team_id': 'home_team_id'})
-        away_features = team_game_stats.rename(columns={'team_id': 'away_team_id'})
+        home_features = team_game_stats.copy()
+        home_feature_cols = {col: f'home_{col}' for col in home_features.columns if col not in ['game_id', 'date']}
+        home_features = home_features.rename(columns=home_feature_cols).rename(columns={'home_team_id': 'team_id'})
+
+        away_features = team_game_stats.copy()
+        away_feature_cols = {col: f'away_{col}' for col in away_features.columns if col not in ['game_id', 'date']}
+        away_features = away_features.rename(columns=away_feature_cols).rename(columns={'away_team_id': 'team_id'})
+
+        final_df = integrated_df.merge(home_features, left_on=['game_id', 'date', 'home_team_id'], right_on=['game_id', 'date', 'team_id'], how='left')
+        final_df = final_df.merge(away_features, left_on=['game_id', 'date', 'away_team_id'], right_on=['game_id', 'date', 'team_id'], how='left')
         
-        final_df = integrated_df.merge(home_features, on=['game_id', 'date', 'home_team_id'], how='left')
-        final_df = final_df.merge(away_features, on=['game_id', 'date', 'away_team_id'], how='left')
-        
+        # Clean up redundant columns from merges
+        final_df = final_df.drop(columns=['team_id_x', 'team_id_y'])
+
         logging.info("Finished creating team-level features.")
         return final_df
 
