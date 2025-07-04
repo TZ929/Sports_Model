@@ -37,26 +37,31 @@ def setup_logger():
 logger = setup_logger()
 # --- End of Logging Setup ---
 
-def find_latest_model_path() -> Path | None:
-    """Finds the path to the latest model based on season directory."""
+def find_latest_model() -> tuple[Path, str] | tuple[None, None]:
+    """
+    Finds the path to the latest model and its corresponding season.
+    Returns a tuple of (model_path, season_name) or (None, None).
+    """
     models_root = Path("data/models")
     if not models_root.exists():
-        return None
+        return None, None
 
     season_dirs = [d for d in models_root.iterdir() if d.is_dir()]
+    
     if not season_dirs:
-        # Fallback to look for a model in the root directory
+        # Fallback for non-versioned model
         model_path = models_root / "advanced_model.joblib"
-        return model_path if model_path.exists() else None
+        if model_path.exists():
+            return model_path, "latest" # Use "latest" as a placeholder season
+        return None, None
 
     latest_season_dir = max(season_dirs, key=lambda d: d.name)
     
-    # Find the joblib file in that directory
     try:
         model_path = next(latest_season_dir.glob("*.joblib"))
-        return model_path
+        return model_path, latest_season_dir.name
     except StopIteration:
-        return None
+        return None, None
 
 def main():
     """Main function to run the prediction CLI."""
@@ -67,7 +72,7 @@ def main():
     args = parser.parse_args()
 
     # Find the latest model automatically
-    model_path = find_latest_model_path()
+    model_path, season = find_latest_model()
     if not model_path:
         logger.error(
             "Prediction failed: No trained model found.",
@@ -77,7 +82,7 @@ def main():
 
     logger.info(
         "Starting prediction process.", 
-        extra={"extra_data": {"game_id": args.game_id, "player_id": args.player_id, "model_path": str(model_path)}}
+        extra={"extra_data": {"game_id": args.game_id, "player_id": args.player_id, "model_path": str(model_path), "season": season}}
     )
 
     # 1. Load Model
