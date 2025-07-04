@@ -25,6 +25,10 @@ class TeamFeatures:
         """Create team-level features."""
         logging.info("Creating team-level strength features...")
 
+        if integrated_df.empty:
+            logging.warning("Input DataFrame is empty. Returning as is.")
+            return integrated_df
+
         if 'date' not in integrated_df.columns:
             logging.error("The 'date' column is missing from the input DataFrame.")
             return integrated_df
