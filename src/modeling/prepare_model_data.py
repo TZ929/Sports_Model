@@ -21,7 +21,8 @@ def load_final_dataset():
     logging.info("Loading final feature dataset...")
     processed_dir = Path("data/processed")
     try:
-        df = pd.read_csv(processed_dir / "master_feature_dataset_v2.csv", parse_dates=['date'])
+        # Changed to load the new featured_data.csv
+        df = pd.read_csv(processed_dir / "featured_data.csv", parse_dates=['date'])
         logging.info("Final dataset loaded successfully.")
         return df
     except FileNotFoundError as e:
@@ -30,6 +31,7 @@ def load_final_dataset():
 
 def prepare_modeling_data(df):
     """Prepares the data for modeling by defining a target variable and splitting the data."""
+    logging.info("--- PREPARING MODELING DATA WITH ODDS FEATURES ---")
     if df is None:
         logging.error("DataFrame is None. Aborting model preparation.")
         return None, None
@@ -40,7 +42,7 @@ def prepare_modeling_data(df):
     # Is the player's team home or away?
     df['is_home'] = (df['team_id'] == df['home_team_id']).astype(int)
     
-    # Get opponent's defensive stats
+    # Get opponent's defensive stats using the new, clear column names
     df['opponent_points_against_roll_avg_5g'] = np.where(
         df['is_home'] == 1,
         df['away_team_points_against_roll_avg_5g'],
@@ -64,13 +66,29 @@ def prepare_modeling_data(df):
         'minutes_played',
     ]
     game_features = ['home_rest_days', 'away_rest_days', 'points_vs_opp_avg']
+    odds_features = [
+        'fanduel_points_line',
+        'fanduel_points_over_odds',
+        'fanduel_points_under_odds'
+    ]
     
-    features = player_features + game_features
+    features = player_features + game_features + odds_features
     target = 'points_over_avg_5g'
     
     # 3. Handle Missing Values
-    df_model = df.dropna(subset=[target] + features)
-    logging.info(f"Dropped {len(df) - len(df_model)} rows with missing values.")
+    # Fill missing odds with a neutral value
+    df[odds_features] = df[odds_features].fillna({
+        'fanduel_points_line': 0,
+        'fanduel_points_over_odds': -110,
+        'fanduel_points_under_odds': -110
+    })
+    
+    # Fill missing player and game features with 0
+    df[player_features + game_features] = df[player_features + game_features].fillna(0)
+
+    # Drop rows only if the target variable is missing
+    df_model = df.dropna(subset=[target])
+    logging.info(f"Dropped {len(df) - len(df_model)} rows with missing target values.")
     
     X = df_model[features]
     y = df_model[target]
