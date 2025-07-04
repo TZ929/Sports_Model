@@ -1,8 +1,9 @@
 import pandas as pd
 import logging
 from pathlib import Path
+from typing import Dict, Any
 
-# Setup logging (can be shared across modules)
+# Setup logging
 log_dir = Path("logs")
 log_dir.mkdir(exist_ok=True)
 logging.basicConfig(
@@ -14,6 +15,34 @@ logging.basicConfig(
     ]
 )
 
+class PlayerFeatures:
+    def __init__(self, config: Dict[str, Any]):
+        self.config = config
+        self.stats_to_average = self.config.get('stats_to_average', 
+            ['points', 'rebounds', 'assists', 'steals', 'blocks', 'turnovers'])
+        self.rolling_windows = self.config.get('rolling_windows', [3, 5, 10])
+
+    def create_rolling_averages(self, integrated_df: pd.DataFrame) -> pd.DataFrame:
+        """Create player-level features, like rolling averages."""
+        logging.info("Creating player-level rolling average features...")
+        
+        if 'date' not in integrated_df.columns:
+            logging.error("The 'date' column is missing from the input DataFrame.")
+            return integrated_df
+            
+        player_game_stats = integrated_df.sort_values(by=['player_id', 'date'])
+        
+        for stat in self.stats_to_average:
+            for window in self.rolling_windows:
+                col_name = f'{stat}_roll_avg_{window}g'
+                player_game_stats[col_name] = player_game_stats.groupby('player_id')[stat].transform(
+                    lambda x: x.shift(1).rolling(window, min_periods=1).mean()
+                )
+                
+        logging.info("Finished creating player-level features.")
+        return player_game_stats
+
+# The following functions are for standalone execution of this script
 def load_processed_data():
     """Load processed data from CSV files."""
     logging.info("Loading processed data from CSV files...")
@@ -29,41 +58,17 @@ def load_processed_data():
         logging.error(f"Error loading processed data: {e}. Please ensure previous steps ran successfully.")
         return None, None, None
 
-def create_player_features(player_stats_df, games_df):
-    """Create player-level features, like rolling averages."""
-    logging.info("Creating player-level features...")
-    
-    # Merge stats with games to get dates
-    player_game_stats = pd.merge(player_stats_df, games_df[['game_id', 'date']], on='game_id')
-    player_game_stats = player_game_stats.sort_values(by=['player_id', 'date'])
-    
-    # Calculate rolling averages
-    stats_to_average = ['points', 'rebounds', 'assists', 'steals', 'blocks', 'turnovers']
-    rolling_windows = [3, 5, 10]
-    
-    for stat in stats_to_average:
-        for window in rolling_windows:
-            col_name = f'{stat}_roll_avg_{window}g'
-            player_game_stats[col_name] = player_game_stats.groupby('player_id')[stat].transform(
-                lambda x: x.shift(1).rolling(window, min_periods=1).mean()
-            )
-            
-    logging.info("Finished creating player-level features.")
-    logging.info(f"\nSample of player features:\n{player_game_stats.head().to_string()}")
-    
-    return player_game_stats
-
-
 if __name__ == '__main__':
     players, player_stats, game_features = load_processed_data()
     
     if player_stats is not None and game_features is not None:
-        player_features_df = create_player_features(player_stats, game_features)
+        # For standalone run, we merge stats and games first
+        integrated_data = pd.merge(player_stats, game_features, on='game_id')
         
-        # Merge with game features
-        final_df = pd.merge(game_features, player_features_df, on=['game_id', 'date'], how='left')
+        feature_creator = PlayerFeatures(config={})
+        player_features_df = feature_creator.create_rolling_averages(integrated_data)
         
         # Save final dataset
         output_dir = Path("data/processed")
-        final_df.to_csv(output_dir / "master_feature_dataset.csv", index=False)
-        logging.info(f"Master feature dataset saved to {output_dir / 'master_feature_dataset.csv'}") 
+        player_features_df.to_csv(output_dir / "master_player_features.csv", index=False)
+        logging.info(f"Master player features dataset saved to {output_dir / 'master_player_features.csv'}") 

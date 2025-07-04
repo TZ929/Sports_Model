@@ -2,6 +2,7 @@ import pandas as pd
 import logging
 from pathlib import Path
 import lightgbm as lgb
+import joblib
 from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score, confusion_matrix
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -64,6 +65,14 @@ def train_advanced_model(train_df):
     model.fit(X_train, y_train)
     
     logging.info("Tuned advanced model trained successfully.")
+    
+    # Save the trained model
+    models_dir = Path("data/models")
+    models_dir.mkdir(exist_ok=True)
+    model_path = models_dir / "advanced_model.joblib"
+    joblib.dump(model, model_path)
+    logging.info(f"Model saved to {model_path}")
+    
     return model
 
 def evaluate_model(model, test_df):
@@ -124,6 +133,8 @@ def evaluate_model(model, test_df):
 
 if __name__ == '__main__':
     train_data, test_data = load_modeling_data()
-    advanced_model = train_advanced_model(train_data)
-    evaluate_model(advanced_model, test_data)
+    if train_data is not None and test_data is not None:
+        advanced_model = train_advanced_model(train_data)
+        if advanced_model:
+            evaluate_model(advanced_model, test_data)
     logging.info("Advanced modeling process finished.") 
