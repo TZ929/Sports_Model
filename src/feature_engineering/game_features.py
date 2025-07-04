@@ -1,88 +1,76 @@
-import logging
 import pandas as pd
-from typing import Dict, Any
+import logging
+from pathlib import Path
 
-logger = logging.getLogger(__name__)
+# Setup logging
+log_dir = Path("logs")
+log_dir.mkdir(exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_dir / "feature_engineering.log"),
+        logging.StreamHandler()
+    ]
+)
 
-class GameFeatures:
-    """Creates game-context features for modeling."""
-
-    def __init__(self, config: Dict[str, Any]):
-        """
-        Initializes the GameFeatures class.
-        
-        Args:
-            config: Configuration dictionary for feature engineering parameters.
-        """
-        self.config = config
-
-    def create_game_context_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Creates features related to the context of the game.
-        
-        Args:
-            df: DataFrame with integrated game and player data.
-            
-        Returns:
-            DataFrame with added game context features.
-        """
-        logger.info("Creating game context features...")
-
-        # 1. Add home/away flag
-        df = self._add_home_away_flag(df)
-        
-        # 2. Calculate rest days
-        df = self._calculate_rest_days(df)
-
-        logger.info("Game context features created successfully.")
-        return df
-
-    def _add_home_away_flag(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Adds a flag indicating if the player's team is home or away."""
-        if 'team_id' in df.columns and 'home_team_id' in df.columns:
-            df['is_home'] = (df['team_id'] == df['home_team_id']).astype(int)
-            logger.info("Added 'is_home' feature.")
-        else:
-            logger.warning("Could not create 'is_home' feature. Missing 'team_id' or 'home_team_id'.")
-        return df
-
-    def _calculate_rest_days(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Calculates the number of rest days for a team before a game."""
-        if 'date' in df.columns and 'team_id' in df.columns:
-            df['date'] = pd.to_datetime(df['date'])
-            df = df.sort_values(by=['team_id', 'date'])
-            df['rest_days'] = df.groupby('team_id')['date'].diff().dt.days.fillna(0)
-            # Cap rest days at a reasonable number, e.g., 7
-            df['rest_days'] = df['rest_days'].clip(upper=self.config.get('max_rest_days', 7))
-            logger.info("Added 'rest_days' feature.")
-        else:
-            logger.warning("Could not create 'rest_days' feature. Missing 'date' or 'team_id'.")
-        return df
-
-def main():
-    """
-    Main function to test the GameFeatures class.
-    This is for demonstration purposes.
-    """
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-    # Example DataFrame
-    data = {
-        'game_id': ['g1', 'g1', 'g2', 'g2'],
-        'player_id': [1, 2, 1, 2],
-        'team_id': ['t1', 't2', 't1', 't2'],
-        'home_team_id': ['t1', 't1', 't3', 't3'],
-        'date': pd.to_datetime(['2023-10-25', '2023-10-25', '2023-10-28', '2023-10-28'])
-    }
-    df = pd.DataFrame(data)
+def load_cleaned_data():
+    """Load cleaned data from CSV files."""
+    logging.info("Loading cleaned data from CSV files...")
+    processed_dir = Path("data/processed")
     
-    config = {'max_rest_days': 7}
-    
-    feature_creator = GameFeatures(config)
-    features_df = feature_creator.create_game_context_features(df)
-    
-    logger.info("DataFrame with game context features:")
-    logger.info(features_df)
+    try:
+        teams_df = pd.read_csv(processed_dir / "teams_cleaned.csv")
+        players_df = pd.read_csv(processed_dir / "players_cleaned.csv")
+        games_df = pd.read_csv(processed_dir / "games_cleaned.csv", parse_dates=['date'])
+        player_stats_df = pd.read_csv(processed_dir / "player_stats_cleaned.csv")
+        logging.info("Cleaned data loaded successfully.")
+        return teams_df, players_df, games_df, player_stats_df
+    except FileNotFoundError as e:
+        logging.error(f"Error loading cleaned data: {e}. Please run the data cleaner script first.")
+        return None, None, None, None
 
-if __name__ == "__main__":
-    main() 
+def create_game_features(games_df, teams_df):
+    """Create game-level features."""
+    logging.info("Creating game-level features...")
+    
+    # Sort games by date for each team
+    games_df = games_df.sort_values(by='date')
+    
+    # Calculate rest days
+    all_games = []
+    for team_id in teams_df['team_id']:
+        team_games = games_df[(games_df['home_team_id'] == team_id) | (games_df['away_team_id'] == team_id)].copy()
+        team_games.loc[:, 'last_game_date'] = team_games['date'].shift(1)
+        team_games.loc[:, 'rest_days'] = (team_games['date'] - team_games['last_game_date']).dt.days
+        all_games.append(team_games)
+        
+    if not all_games:
+        logging.warning("No games found to engineer features for.")
+        return pd.DataFrame()
+
+    # Concatenate and drop duplicates
+    featured_games_df = pd.concat(all_games).drop_duplicates(subset=['game_id']).sort_values('date')
+    
+    # Separate rest days for home and away teams
+    home_rest = featured_games_df.rename(columns={'rest_days': 'home_rest_days'})[['game_id', 'home_rest_days']]
+    away_rest = featured_games_df.rename(columns={'rest_days': 'away_rest_days'})[['game_id', 'away_rest_days']]
+
+    final_df = games_df.merge(home_rest, on='game_id').merge(away_rest, on='game_id')
+    
+    logging.info("Finished creating game-level features.")
+    logging.info(f"\nSample of game features:\n{final_df.head().to_string()}")
+    
+    return final_df
+
+
+if __name__ == '__main__':
+    teams, players, games, player_stats = load_cleaned_data()
+    if games is not None:
+        game_features_df = create_game_features(games, teams)
+        
+        # Save features to a new CSV
+        output_dir = Path("data/processed")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        game_features_df.to_csv(output_dir / "game_features.csv", index=False)
+        logging.info(f"Game features saved to {output_dir / 'game_features.csv'}") 
