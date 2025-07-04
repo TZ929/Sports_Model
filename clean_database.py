@@ -9,106 +9,48 @@ import time
 from src.utils.database import db_manager
 from src.data_collection.espn_api import ESPNAPICollector
 from sqlalchemy import text
+import argparse
 
 # Set up logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def clean_database():
-    """Clean up database and ensure valid ESPN data."""
-    
-    with db_manager.get_session() as session:
-        try:
-            # 1. Remove invalid players (those with BR_ prefix)
-            logger.info("Removing invalid players with BR_ prefix...")
-            result = session.execute(
-                text("DELETE FROM players WHERE player_id LIKE 'BR_%'")
-            )
+def clean_tables():
+    """Truncates the games and player_game_stats tables."""
+    try:
+        with db_manager.get_session() as session:
+            session.execute(text("DELETE FROM player_game_stats;"))
+            session.execute(text("DELETE FROM games;"))
             session.commit()
-            logger.info(f"Removed invalid players")
-            
-            # 2. Check current valid players
-            result = session.execute(text("SELECT COUNT(*) FROM players"))
-            valid_count = result.scalar() or 0
-            logger.info(f"Valid players remaining: {valid_count}")
-            
-            # 3. If we don't have enough valid players, collect more from ESPN
-            if valid_count < 100:
-                logger.info("Collecting additional players from ESPN API...")
-                collector = ESPNAPICollector()
-                
-                # Get all teams first
-                teams = collector.get_teams("2024")
-                logger.info(f"Found {len(teams)} teams")
-                
-                # Collect players from all teams (not just first 5)
-                all_players = []
-                for i, team in enumerate(teams):
-                    try:
-                        team_abbr = team['team_abbreviation']
-                        url = f"{collector.base_url}/teams/{team_abbr}/roster"
-                        
-                        response = requests.get(url, headers=collector.headers, timeout=30)
-                        response.raise_for_status()
-                        data = response.json()
-                        
-                        athletes = data.get('athletes', [])
-                        for athlete in athletes:
-                            player_info = {
-                                'player_id': athlete.get('id', ''),
-                                'full_name': athlete.get('fullName', ''),
-                                'team_name': team['team_name'],
-                                'position': athlete.get('position', {}).get('abbreviation', ''),
-                                'season': '2024'
-                            }
-                            all_players.append(player_info)
-                        
-                        logger.info(f"Collected {len(athletes)} players from {team['team_name']} ({i+1}/{len(teams)})")
-                        
-                        # Be respectful with API calls
-                        time.sleep(0.5)
-                        
-                    except Exception as e:
-                        logger.error(f"Error getting players for team {team['team_name']}: {e}")
-                        continue
-                
-                # Insert new players
-                for player in all_players:
-                    try:
-                        session.execute(
-                            text("""
-                                INSERT OR IGNORE INTO players (player_id, full_name, team_name, position, season)
-                                VALUES (:player_id, :full_name, :team_name, :position, :season)
-                            """),
-                            player
-                        )
-                    except Exception as e:
-                        logger.error(f"Error inserting player {player['full_name']}: {e}")
-                        continue
-                
-                session.commit()
-                logger.info(f"Added {len(all_players)} new players")
-            
-            # 4. Final count
-            result = session.execute(text("SELECT COUNT(*) FROM players"))
-            final_count = result.scalar() or 0
-            logger.info(f"Final player count: {final_count}")
-            
-            # 5. Show sample of valid players
-            result = session.execute(
-                text("SELECT player_id, full_name, team_name FROM players LIMIT 10")
-            )
-            sample_players = result.fetchall()
-            logger.info("Sample valid players:")
-            for player in sample_players:
-                logger.info(f"  {player[0]} - {player[1]} ({player[2]})")
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error cleaning database: {e}")
-            session.rollback()
-            return False
+            logging.info("Successfully truncated 'games' and 'player_game_stats' tables.")
+    except Exception as e:
+        logging.error(f"Failed to clean tables: {e}")
+
+def clean_database(tables_to_clean=None):
+    """
+    Cleans the database by dropping specified tables or all tables if none are specified.
+    """
+    if tables_to_clean is None:
+        # Default behavior: clean all tables
+        all_tables = ['player_game_stats', 'games', 'players', 'teams']
+    else:
+        # Clean only specified tables
+        all_tables = tables_to_clean
+
+    logger.info(f"Attempting to clean the following tables: {', '.join(all_tables)}")
+    
+    with db_manager.engine.connect() as connection:
+        for table in all_tables:
+            try:
+                # Use "IF EXISTS" to avoid errors if the table doesn't exist
+                connection.execute(text(f'DROP TABLE IF EXISTS {table}'))
+                logger.info(f"Successfully dropped table: {table}")
+            except Exception as e:
+                logger.error(f"Error dropping table {table}: {e}")
+    
+    logger.info("Re-initializing the database schema.")
+    db_manager.create_tables()
+    logger.info("Database cleaning and re-initialization complete.")
 
 def verify_phase2_completion():
     """Verify that Phase 2 is 100% complete."""
@@ -155,17 +97,17 @@ def verify_phase2_completion():
             logger.error(f"Error verifying Phase 2: {e}")
             return False
 
+def main():
+    parser = argparse.ArgumentParser(description="Clean specified tables from the database.")
+    parser.add_argument(
+        '--tables', 
+        nargs='*', 
+        default=None, 
+        help='A list of table names to clean. If not provided, all tables will be cleaned.'
+    )
+    args = parser.parse_args()
+
+    clean_database(args.tables)
+
 if __name__ == "__main__":
-    logger.info("Starting database cleanup for Phase 2 completion...")
-    
-    # Clean the database
-    if clean_database():
-        logger.info("Database cleanup completed successfully")
-        
-        # Verify Phase 2 completion
-        if verify_phase2_completion():
-            logger.info("🎉 PHASE 2 IS NOW 100% COMPLETE!")
-        else:
-            logger.error("Phase 2 completion verification failed")
-    else:
-        logger.error("Database cleanup failed") 
+    main() 
