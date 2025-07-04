@@ -2,59 +2,44 @@ import logging
 import pandas as pd
 import sys
 from pathlib import Path
+import os
 
 # Add project root to the Python path
 sys.path.append(str(Path(__file__).resolve().parents[0]))
 
-from src.utils.database import db_manager
+from src.utils.database import db_manager, PropOdds
 from src.preprocessing.data_cleaner import DataCleaner
 from src.preprocessing.data_validator import DataValidator
 from src.preprocessing.data_integrator import DataIntegrator
 from src.feature_engineering.player_features import PlayerFeatures
 from src.feature_engineering.game_features import GameFeatures
 from src.feature_engineering.team_features import TeamFeatures
-from src.data_collection.sportsbook_scraper import scrape_all_sportsbooks
+from src.data_collection.sports_game_odds_api import SportsGameOddsAPICollector
 from src.utils.config import config
-from sqlalchemy import text
+from sqlalchemy import text, func
 from typing import Dict, List, Any, Optional
-from fuzzywuzzy import process, fuzz
-
-def find_best_match(name_to_match: str, candidates: Dict[str, str], scorer, cutoff=75) -> Optional[str]:
-    """Find the best match for a name from a list of candidates."""
-    best_match = process.extractOne(name_to_match, candidates.keys(), scorer=scorer, score_cutoff=cutoff)
-    if best_match:
-        logger.info(f"Matched '{name_to_match}' to '{best_match[0]}' with score {best_match[1]}")
-        return candidates[best_match[0]]
-    return None
-
-def get_mock_odds_data() -> Dict[str, List[Dict[str, Any]]]:
-    """Returns a mock dictionary of sportsbook odds for development."""
-    logger.info("Using mock sportsbook odds data.")
-    return {
-        'fanduel': [
-            {
-                'player_name': 'Nikola Jokic',
-                'market_type': 'Points',
-                'line': 26.5,
-                'over_odds': -115,
-                'under_odds': -105,
-                'game_info': {'home_team': 'Denver Nuggets', 'away_team': 'Boston Celtics'}
-            },
-            {
-                'player_name': 'Jayson Tatum',
-                'market_type': 'Points',
-                'line': 28.5,
-                'over_odds': -110,
-                'under_odds': -110,
-                'game_info': {'home_team': 'Denver Nuggets', 'away_team': 'Boston Celtics'}
-            }
-        ],
-        'espnbet': [] # Not yet implemented
-    }
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+def run_historical_odds_collection():
+    """Checks if historical odds need to be collected and runs the collector if so."""
+    with db_manager.get_session() as session:
+        prop_count = session.query(func.count(PropOdds.game_id)).scalar()
+    
+    if prop_count == 0:
+        logger.info("Prop odds table is empty. Running historical odds collector...")
+        api_key = os.environ.get('SPORTS_GAME_ODDS_API_KEY')
+        if not api_key:
+            logger.error("SPORTS_GAME_ODDS_API_KEY environment variable not set. Cannot collect historical odds.")
+            return
+        
+        collector = SportsGameOddsAPICollector(api_key=api_key)
+        # Fetch for the entire 2023-2024 season
+        collector.collect_and_store_odds(start_date="2023-10-24", end_date="2024-04-14")
+    else:
+        logger.info("Prop odds table already contains data. Skipping historical collection.")
 
 def load_data_from_db() -> Dict[str, pd.DataFrame]:
     """Loads all necessary tables from the database into pandas DataFrames."""
@@ -64,60 +49,53 @@ def load_data_from_db() -> Dict[str, pd.DataFrame]:
         stats_df = pd.read_sql(text("SELECT * FROM player_game_stats"), session.bind)
         players_df = pd.read_sql(text("SELECT * FROM players"), session.bind)
         teams_df = pd.read_sql(text("SELECT * FROM teams"), session.bind)
-    logger.info(f"Loaded {len(games_df)} games, {len(stats_df)} player stats, {len(players_df)} players, and {len(teams_df)} teams.")
-    return {'games': games_df, 'player_stats': stats_df, 'players': players_df, 'teams': teams_df}
+        odds_df = pd.read_sql(text("SELECT * FROM prop_odds"), session.bind)
+    logger.info(f"Loaded {len(games_df)} games, {len(stats_df)} player stats, {len(players_df)} players, {len(teams_df)} teams, and {len(odds_df)} prop odds.")
+    return {'games': games_df, 'player_stats': stats_df, 'players': players_df, 'teams': teams_df, 'prop_odds': odds_df}
 
-def integrate_sportsbook_odds(features_df: pd.DataFrame, odds_data: Dict[str, List[Dict[str, Any]]], dataframes: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+def integrate_sportsbook_odds(features_df: pd.DataFrame, odds_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Integrates sportsbook odds into the features DataFrame using fuzzy matching.
+    Integrates historical sportsbook odds into the features DataFrame.
     """
-    logger.info("Integrating sportsbook odds...")
+    logger.info("Integrating historical sportsbook odds...")
+    if odds_df.empty:
+        logger.warning("Odds DataFrame is empty. Skipping integration.")
+        # Still need to create the columns for the model
+        features_df['fanduel_points_line'] = 0
+        features_df['fanduel_points_over_odds'] = -110
+        features_df['fanduel_points_under_odds'] = -110
+        return features_df
 
-    # Prepare candidate names from our database for matching
-    player_names = {str(p['full_name']): str(p['player_id']) for _, p in dataframes['players'].iterrows()}
-    team_names = {str(t['team_name']): str(t['team_id']) for _, t in dataframes['teams'].iterrows()}
+    # We will just use FanDuel for now for simplicity
+    fanduel_odds = odds_df[odds_df['sportsbook'] == 'FanDuel'].copy()
+    fanduel_odds = fanduel_odds.rename(columns={
+        'line': 'fanduel_points_line',
+        'over_odds': 'fanduel_points_over_odds',
+        'under_odds': 'fanduel_points_under_odds'
+    })
 
-    # Initialize odds columns
-    features_df['fanduel_points_line'] = None
-    features_df['fanduel_points_over_odds'] = None
-    features_df['fanduel_points_under_odds'] = None
-
-    fanduel_props = odds_data.get('fanduel', [])
-    for prop in fanduel_props:
-        player_name = prop.get('player_name')
-        if not player_name or prop.get('market_type') != 'Points':
-            continue
-
-        matched_player_id = find_best_match(player_name, player_names, scorer=fuzz.token_sort_ratio)
-        if not matched_player_id:
-            logger.warning(f"Could not find a good match for player: {player_name}")
-            continue
-            
-        # This matching logic for games is simplified. A robust solution would also match teams.
-        # For now, we assume the prop is for a game already in our features_df for that player.
-        prop_rows = features_df[features_df['player_id'] == matched_player_id]
-        
-        if not prop_rows.empty:
-            # Apply the odds to all games we have for this player (a simplification)
-            features_df.loc[prop_rows.index, 'fanduel_points_line'] = prop.get('line')
-            features_df.loc[prop_rows.index, 'fanduel_points_over_odds'] = prop.get('over_odds')
-            features_df.loc[prop_rows.index, 'fanduel_points_under_odds'] = prop.get('under_odds')
+    # Select relevant columns and merge
+    odds_to_merge = fanduel_odds[['game_id', 'player_id', 'fanduel_points_line', 'fanduel_points_over_odds', 'fanduel_points_under_odds']]
+    
+    # Need to make sure player_id types match for merging
+    features_df['player_id'] = features_df['player_id'].astype(str)
+    odds_to_merge['player_id'] = odds_to_merge['player_id'].astype(str)
+    
+    merged_df = pd.merge(features_df, odds_to_merge, on=['game_id', 'player_id'], how='left')
 
     logger.info("Sportsbook odds integration complete.")
-    return features_df
+    return merged_df
 
 def run_pipeline():
     """
     Executes the full data processing and feature engineering pipeline.
     """
     logger.info("Starting data pipeline...")
+    
+    # 1. Collect historical odds if needed
+    run_historical_odds_collection()
 
-    # 1. Scrape Sportsbook Odds (or use mock data)
-    # In a production system, you might pass a specific date.
-    # odds_data = scrape_all_sportsbooks()
-    odds_data = get_mock_odds_data()
-
-    # 2. Load data from DB
+    # 2. Load data from DB (now including odds)
     dataframes = load_data_from_db()
     
     # 3. Preprocessing
@@ -142,7 +120,7 @@ def run_pipeline():
     features_df = team_feature_creator.create_team_strength_features(features_df)
 
     # 5. Integrate Sportsbook Odds
-    features_df = integrate_sportsbook_odds(features_df, odds_data, dataframes)
+    features_df = integrate_sportsbook_odds(features_df, dataframes['prop_odds'])
 
     # 6. Save processed data
     output_path = config.get_data_path('processed') / 'featured_data.csv'
@@ -150,6 +128,4 @@ def run_pipeline():
     logger.info(f"Pipeline complete. Processed data saved to {output_path}")
 
 if __name__ == "__main__":
-    # This script assumes the database is populated.
-    # The data collection script should be run before this.
     run_pipeline() 

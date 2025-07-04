@@ -19,13 +19,46 @@ class PlayerFeatures:
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.stats_to_average = self.config.get('stats_to_average', 
-            ['points', 'rebounds', 'assists', 'steals', 'blocks', 'turnovers'])
+            ['points', 'rebounds', 'assists', 'steals', 'blocks', 'turnovers', 'game_score'])
         self.rolling_windows = self.config.get('rolling_windows', [3, 5, 10])
+
+    def create_game_score(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Calculates John Hollinger's Game Score for each player-game."""
+        logging.info("Calculating Game Score for each player-game...")
+        
+        # Ensure required columns are present
+        required_cols = ['points', 'field_goals_made', 'field_goals_attempted', 
+                         'free_throws_attempted', 'free_throws_made', 'offensive_rebounds',
+                         'defensive_rebounds', 'steals', 'assists', 'blocks',
+                         'personal_fouls', 'turnovers']
+        
+        for col in required_cols:
+            if col not in df.columns:
+                logging.warning(f"Required column '{col}' for Game Score not found. Setting to 0.")
+                df[col] = 0
+
+        df['game_score'] = (
+            df['points'] + 
+            (0.4 * df['field_goals_made']) - 
+            (0.7 * df['field_goals_attempted']) - 
+            (0.4 * (df['free_throws_attempted'] - df['free_throws_made'])) + 
+            (0.7 * df['offensive_rebounds']) + 
+            (0.3 * df['defensive_rebounds']) + 
+            df['steals'] + 
+            (0.7 * df['assists']) + 
+            (0.7 * df['blocks']) - 
+            (0.4 * df['personal_fouls']) - 
+            df['turnovers']
+        )
+        return df
 
     def create_rolling_averages(self, integrated_df: pd.DataFrame) -> pd.DataFrame:
         """Create player-level features, like rolling averages."""
         logging.info("Creating player-level rolling average features...")
         
+        # First, calculate the game score for each game
+        integrated_df = self.create_game_score(integrated_df)
+
         if 'date' not in integrated_df.columns:
             logging.error("The 'date' column is missing from the input DataFrame.")
             return integrated_df

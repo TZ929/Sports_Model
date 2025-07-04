@@ -63,6 +63,7 @@ def prepare_modeling_data(df):
         'points_roll_avg_5g',
         'rebounds_roll_avg_5g',
         'assists_roll_avg_5g',
+        'game_score_roll_avg_5g', # Added new feature
         'minutes_played',
     ]
     game_features = ['home_rest_days', 'away_rest_days', 'points_vs_opp_avg']

@@ -87,11 +87,10 @@ class PropOdds(Base):
     """Prop odds table to store betting lines."""
     __tablename__ = 'prop_odds'
     
-    prop_id = Column(Integer, primary_key=True, autoincrement=True)
-    game_id = Column(String(50), nullable=False)
-    player_id = Column(String(50))
-    sportsbook = Column(String(20), nullable=False)  # fanduel, espnbet
-    prop_type = Column(String(30), nullable=False)  # points, rebounds, assists, etc.
+    game_id = Column(String(50), primary_key=True)
+    player_id = Column(String(50), primary_key=True)
+    sportsbook = Column(String(20), primary_key=True)
+    prop_type = Column(String(30), primary_key=True)
     line = Column(Float, nullable=False)
     over_odds = Column(Integer)
     under_odds = Column(Integer)
