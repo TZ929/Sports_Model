@@ -32,24 +32,42 @@ def load_modeling_data():
         return None, None
 
 def train_advanced_model(train_df):
-    """Trains an advanced LightGBM model."""
+    """Trains an advanced LightGBM model with optimized hyperparameters."""
     if train_df is None:
         logging.error("Training data is None. Aborting training.")
         return None
 
-    logging.info("Training advanced model (LightGBM)...")
+    logging.info("Training advanced model (LightGBM) with tuned parameters...")
     
     X_train = train_df.drop(columns=['points_over_avg_5g'])
     y_train = train_df['points_over_avg_5g']
     
-    model = lgb.LGBMClassifier(random_state=42)
+    # Best parameters from Optuna tuning
+    best_params = {
+        'n_estimators': 992,
+        'learning_rate': 0.00860483369995987,
+        'num_leaves': 277,
+        'max_depth': 3,
+        'min_child_samples': 5,
+        'subsample': 0.7799991055981887,
+        'colsample_bytree': 0.8467993189633719,
+        'reg_alpha': 0.0006342386013819185,
+        'reg_lambda': 1.4588353193105266e-05,
+        'objective': 'binary',
+        'metric': 'auc',
+        'verbosity': -1,
+        'boosting_type': 'gbdt',
+        'random_state': 42
+    }
+    
+    model = lgb.LGBMClassifier(**best_params)
     model.fit(X_train, y_train)
     
-    logging.info("Advanced model trained successfully.")
+    logging.info("Tuned advanced model trained successfully.")
     return model
 
 def evaluate_model(model, test_df):
-    """Evaluates the model on the test set."""
+    """Evaluates the model on the test set and analyzes feature importance."""
     if model is None or test_df is None:
         logging.error("Model or test data is None. Aborting evaluation.")
         return
@@ -82,12 +100,26 @@ def evaluate_model(model, test_df):
     plt.xlabel('Predicted')
     plt.ylabel('Actual')
     
-    # Save the plot
     analysis_dir = Path("analysis_results")
     analysis_dir.mkdir(exist_ok=True)
     plt.savefig(analysis_dir / "advanced_model_confusion_matrix.png")
     plt.close()
     logging.info(f"Confusion matrix saved to '{analysis_dir.resolve()}'")
+
+    # Feature Importance
+    logging.info("--- Feature Importance Analysis ---")
+    feature_importances = pd.DataFrame({'feature': X_test.columns, 'importance': model.feature_importances_})
+    feature_importances = feature_importances.sort_values(by='importance', ascending=False)
+    
+    logging.info(f"\n{feature_importances.to_string()}")
+    
+    plt.figure(figsize=(10, 8))
+    sns.barplot(x='importance', y='feature', data=feature_importances)
+    plt.title('Feature Importance')
+    plt.tight_layout()
+    plt.savefig(analysis_dir / "advanced_model_feature_importance.png")
+    plt.close()
+    logging.info(f"Feature importance plot saved to '{analysis_dir.resolve()}'")
 
 
 if __name__ == '__main__':
