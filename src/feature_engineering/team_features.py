@@ -1,73 +1,83 @@
-import logging
 import pandas as pd
-from typing import Dict, Any
+import logging
+from pathlib import Path
 
-logger = logging.getLogger(__name__)
+# Setup logging
+log_dir = Path("logs")
+log_dir.mkdir(exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_dir / "feature_engineering.log"),
+        logging.StreamHandler()
+    ]
+)
 
-class TeamFeatures:
-    """Creates team-level features for modeling."""
-
-    def __init__(self, config: Dict[str, Any]):
-        """
-        Initializes the TeamFeatures class.
-        
-        Args:
-            config: Configuration dictionary for feature engineering parameters.
-        """
-        self.config = config
-
-    def create_team_strength_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Creates features related to team strength and recent form.
-        
-        This is a placeholder for more complex calculations like ELO ratings
-        or team-based rolling averages.
-        
-        Args:
-            df: DataFrame with integrated game and team data.
-            
-        Returns:
-            DataFrame with added team strength features.
-        """
-        logger.info("Creating team strength features...")
-
-        # Placeholder: a simple example of a team feature.
-        # This could be expanded to calculate rolling win percentages, point differentials, etc.
-        if 'is_win' in df.columns and 'team_id' in df.columns:
-            df = df.sort_values(by=['team_id', 'date'])
-            df['team_win_rate_rolling'] = df.groupby('team_id')['is_win'].transform(
-                lambda x: x.rolling(window=self.config.get('team_form_window', 10), min_periods=1).mean()
-            )
-            logger.info("Created 'team_win_rate_rolling' feature.")
-        else:
-            logger.warning("Could not create 'team_win_rate_rolling'. Missing 'is_win' or 'team_id'.")
-            
-        logger.info("Team strength feature creation complete.")
+def load_master_dataset():
+    """Load the master feature dataset."""
+    logging.info("Loading master feature dataset...")
+    processed_dir = Path("data/processed")
+    try:
+        df = pd.read_csv(processed_dir / "master_feature_dataset.csv", parse_dates=['date'])
+        logging.info("Master feature dataset loaded successfully.")
         return df
+    except FileNotFoundError as e:
+        logging.error(f"Error loading master dataset: {e}. Please ensure previous steps ran successfully.")
+        return None
 
-def main():
-    """
-    Main function to test the TeamFeatures class.
-    This is for demonstration purposes.
-    """
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+def create_team_features(games_df):
+    """Create team-level features."""
+    logging.info("Creating team-level features...")
 
-    # Example DataFrame
-    data = {
-        'game_id': ['g1', 'g2', 'g3', 'g4'],
-        'team_id': ['t1', 't1', 't1', 't1'],
-        'date': pd.to_datetime(['2023-10-25', '2023-10-27', '2023-10-29', '2023-10-31']),
-        'is_win': [1, 0, 1, 1]
-    }
-    df = pd.DataFrame(data)
-    
-    config = {'team_form_window': 3}
-    
-    feature_creator = TeamFeatures(config)
-    features_df = feature_creator.create_team_strength_features(df)
-    
-    logger.info("DataFrame with team features:")
-    logger.info(features_df)
+    # Ensure games are sorted by date
+    games_df = games_df.sort_values(by='date')
 
-if __name__ == "__main__":
-    main() 
+    # Create a DataFrame with one row per team per game
+    home_teams = games_df[['game_id', 'date', 'home_team_id', 'home_score', 'away_score']].rename(
+        columns={'home_team_id': 'team_id', 'home_score': 'points_for', 'away_score': 'points_against'}
+    )
+    away_teams = games_df[['game_id', 'date', 'away_team_id', 'home_score', 'away_score']].rename(
+        columns={'away_team_id': 'team_id', 'away_score': 'points_for', 'home_score': 'points_against'}
+    )
+    
+    team_game_stats = pd.concat([home_teams, away_teams]).sort_values(by=['team_id', 'date'])
+    
+    # Calculate rolling averages for team stats
+    stats_to_average = ['points_for', 'points_against']
+    rolling_windows = [3, 5, 10]
+
+    for stat in stats_to_average:
+        for window in rolling_windows:
+            col_name = f'team_{stat}_roll_avg_{window}g'
+            team_game_stats[col_name] = team_game_stats.groupby('team_id')[stat].transform(
+                lambda x: x.shift(1).rolling(window, min_periods=1).mean()
+            )
+
+    logging.info("Finished creating team-level features.")
+    return team_game_stats
+
+if __name__ == '__main__':
+    master_df = load_master_dataset()
+    
+    if master_df is not None:
+        # Create a unique games dataframe to avoid duplicate calculations
+        games_unique_df = master_df[['game_id', 'date', 'home_team_id', 'away_team_id', 'home_score', 'away_score']].drop_duplicates()
+        team_features_df = create_team_features(games_unique_df)
+        
+        # Merge team features back into the master dataset
+        # Need to merge for both home and away teams
+        
+        home_features = team_features_df.rename(columns=lambda x: f'home_{x}' if x not in ['game_id', 'date'] else x)
+        away_features = team_features_df.rename(columns=lambda x: f'away_{x}' if x not in ['game_id', 'date'] else x)
+
+        final_df = pd.merge(master_df, home_features, on=['game_id', 'date'], suffixes=('', '_home_y'))
+        final_df = pd.merge(final_df, away_features, on=['game_id', 'date'], suffixes=('', '_away_y'))
+
+        # Clean up columns from merge
+        final_df = final_df.loc[:, ~final_df.columns.str.endswith('_y')]
+        
+        # Save final dataset
+        output_dir = Path("data/processed")
+        final_df.to_csv(output_dir / "master_feature_dataset_v2.csv", index=False)
+        logging.info(f"Master feature dataset with team features saved to {output_dir / 'master_feature_dataset_v2.csv'}") 
