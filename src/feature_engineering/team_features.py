@@ -65,17 +65,23 @@ if __name__ == '__main__':
         games_unique_df = master_df[['game_id', 'date', 'home_team_id', 'away_team_id', 'home_score', 'away_score']].drop_duplicates()
         team_features_df = create_team_features(games_unique_df)
         
-        # Merge team features back into the master dataset
-        # Need to merge for both home and away teams
+        # --- Corrected Merge Logic ---
         
-        home_features = team_features_df.rename(columns=lambda x: f'home_{x}' if x not in ['game_id', 'date'] else x)
-        away_features = team_features_df.rename(columns=lambda x: f'away_{x}' if x not in ['game_id', 'date'] else x)
+        # 1. Prepare home team features
+        home_features = team_features_df.copy()
+        home_features = home_features.rename(columns={'team_id': 'home_team_id'})
+        home_feature_cols = {col: f'home_{col}' for col in home_features.columns if col not in ['game_id', 'date', 'home_team_id']}
+        home_features = home_features.rename(columns=home_feature_cols)
 
-        final_df = pd.merge(master_df, home_features, on=['game_id', 'date'], suffixes=('', '_home_y'))
-        final_df = pd.merge(final_df, away_features, on=['game_id', 'date'], suffixes=('', '_away_y'))
+        # 2. Prepare away team features
+        away_features = team_features_df.copy()
+        away_features = away_features.rename(columns={'team_id': 'away_team_id'})
+        away_feature_cols = {col: f'away_{col}' for col in away_features.columns if col not in ['game_id', 'date', 'away_team_id']}
+        away_features = away_features.rename(columns=away_feature_cols)
 
-        # Clean up columns from merge
-        final_df = final_df.loc[:, ~final_df.columns.str.endswith('_y')]
+        # 3. Merge back to the master dataframe
+        final_df = pd.merge(master_df, home_features, on=['game_id', 'date', 'home_team_id'], how='left')
+        final_df = pd.merge(final_df, away_features, on=['game_id', 'date', 'away_team_id'], how='left')
         
         # Save final dataset
         output_dir = Path("data/processed")
