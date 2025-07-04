@@ -6,8 +6,7 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean, Text, func
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import sessionmaker, Session, declarative_base
 from sqlalchemy.sql import text
 from datetime import datetime
 
