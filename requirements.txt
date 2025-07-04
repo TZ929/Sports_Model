@@ -39,4 +39,5 @@ isort>=5.12.0
 # Additional utilities
 tqdm>=4.65.0
 joblib>=1.3.0
-scipy>=1.11.0 
+scipy>=1.11.0
+optuna>=3.5.0 

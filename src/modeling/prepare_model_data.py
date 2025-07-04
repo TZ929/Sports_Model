@@ -36,33 +36,39 @@ def prepare_modeling_data(df):
 
     logging.info("Preparing data for modeling...")
 
+    # --- Advanced Feature Engineering ---
+    # Is the player's team home or away?
+    df['is_home'] = (df['team_id'] == df['home_team_id']).astype(int)
+    
+    # Get opponent's defensive stats
+    df['opponent_points_against_roll_avg_5g'] = np.where(
+        df['is_home'] == 1,
+        df['away_team_points_against_roll_avg_5g'],
+        df['home_team_points_against_roll_avg_5g']
+    )
+    
+    # Create matchup-specific feature
+    df['points_vs_opp_avg'] = df['points_roll_avg_5g'] - df['opponent_points_against_roll_avg_5g']
+    logging.info("Engineered new matchup feature: 'points_vs_opp_avg'.")
+    # ---
+
     # 1. Define the Target Variable
-    # Predict if a player will score more points than their 5-game rolling average.
     df['points_over_avg_5g'] = (df['points'] > df['points_roll_avg_5g']).astype(int)
     logging.info("Target variable 'points_over_avg_5g' created.")
 
     # 2. Select Features
-    # Start with a subset of features to avoid multicollinearity and simplify
     player_features = [
         'points_roll_avg_5g',
         'rebounds_roll_avg_5g',
         'assists_roll_avg_5g',
         'minutes_played',
     ]
-    team_features = [
-        'home_team_points_for_roll_avg_5g',
-        'home_team_points_against_roll_avg_5g',
-        'away_team_points_for_roll_avg_5g',
-        'away_team_points_against_roll_avg_5g',
-    ]
-    game_features = ['home_rest_days', 'away_rest_days']
+    game_features = ['home_rest_days', 'away_rest_days', 'points_vs_opp_avg']
     
-    features = player_features + team_features + game_features
+    features = player_features + game_features
     target = 'points_over_avg_5g'
     
     # 3. Handle Missing Values
-    # We can't use rows where we don't have a recent average to compare against.
-    # Also drop rows where other key features are missing.
     df_model = df.dropna(subset=[target] + features)
     logging.info(f"Dropped {len(df) - len(df_model)} rows with missing values.")
     
@@ -70,7 +76,6 @@ def prepare_modeling_data(df):
     y = df_model[target]
     
     # 4. Split Data
-    # We'll do a simple random split for now. A time-based split would be better for a real model.
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
     logging.info(f"Data split into training ({len(X_train)} rows) and testing ({len(X_test)} rows).")
 
