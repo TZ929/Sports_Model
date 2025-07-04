@@ -37,22 +37,51 @@ def setup_logger():
 logger = setup_logger()
 # --- End of Logging Setup ---
 
+def find_latest_model_path() -> Path | None:
+    """Finds the path to the latest model based on season directory."""
+    models_root = Path("data/models")
+    if not models_root.exists():
+        return None
+
+    season_dirs = [d for d in models_root.iterdir() if d.is_dir()]
+    if not season_dirs:
+        # Fallback to look for a model in the root directory
+        model_path = models_root / "advanced_model.joblib"
+        return model_path if model_path.exists() else None
+
+    latest_season_dir = max(season_dirs, key=lambda d: d.name)
+    
+    # Find the joblib file in that directory
+    try:
+        model_path = next(latest_season_dir.glob("*.joblib"))
+        return model_path
+    except StopIteration:
+        return None
+
 def main():
     """Main function to run the prediction CLI."""
     parser = argparse.ArgumentParser(description="Make predictions for player performance in a given game.")
     parser.add_argument("game_id", type=str, help="The ID of the game to predict.")
     parser.add_argument("player_id", type=str, help="The ID of the player to predict for.")
-    parser.add_argument("--model_path", type=str, default="data/models/advanced_model.joblib", help="Path to the trained model file.")
     
     args = parser.parse_args()
 
+    # Find the latest model automatically
+    model_path = find_latest_model_path()
+    if not model_path:
+        logger.error(
+            "Prediction failed: No trained model found.",
+            extra={"extra_data": {"game_id": args.game_id, "player_id": args.player_id}}
+        )
+        return
+
     logger.info(
         "Starting prediction process.", 
-        extra={"extra_data": {"game_id": args.game_id, "player_id": args.player_id, "model_path": args.model_path}}
+        extra={"extra_data": {"game_id": args.game_id, "player_id": args.player_id, "model_path": str(model_path)}}
     )
 
     # 1. Load Model
-    model = load_model(args.model_path)
+    model = load_model(model_path)
     if model is None:
         logger.error("Prediction failed: Could not load the model.")
         return

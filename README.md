@@ -1,83 +1,88 @@
-# NBA/WNBA Predictive Model for Player, Team, & Game Props
+# Sports Model: NBA/WNBA Predictive Betting System
 
-A machine learning system to identify valuable betting opportunities for NBA and WNBA props on FanDuel and ESPNBET.
+This project is a comprehensive machine learning system designed to identify valuable betting opportunities for NBA and WNBA player props. It automates the entire workflow from data collection and feature engineering to model training and prediction.
 
-## Project Overview
+## ✨ Features
 
-This project develops a robust, automated system that:
-- Acquires historical game/player data and real-time betting odds
-- Trains predictive models for various prop bets
-- Compares model predictions against sportsbook odds to identify "value" bets
-- Presents potential bets in a clear, actionable format
+- **Automated Data Pipeline**: Ingests player stats, game data, and betting odds from multiple sources.
+- **Advanced Feature Engineering**: Creates sophisticated features like rolling averages, opponent strength, and player matchups.
+- **Versioned Model Training**: A robust, automated pipeline to retrain and evaluate models, with versioning for different seasons.
+- **Dockerized Environment**: The entire application is containerized with Docker for easy setup and consistent execution.
+- **CI/CD Automation**: A GitHub Actions workflow automatically tests, lints, and builds the application on every push.
 
-## Target Props
+## 🛠️ Tech Stack
 
-### Player Props
-- Points (Over/Under)
-- Rebounds (O/U)
-- Assists (O/U)
-- Three-Pointers Made (O/U)
-- Combos (Points+Rebounds+Assists)
+- **Language**: Python 3.11
+- **Core Libraries**: pandas, scikit-learn, LightGBM, Optuna
+- **Database**: SQLAlchemy with SQLite (default) or PostgreSQL
+- **Automation & Orchestration**: Docker, GitHub Actions, Click
 
-### Team Props
-- Total Points (O/U)
-- Team to Win by a Margin
+---
 
-### Game Props
-- Game Total Points (O/U)
-- First Basket Scorer (secondary goal)
+## 🚀 Docker-Based Quickstart
 
-## Success Metrics
+The recommended way to run this project is with Docker.
 
-- **Predictive Accuracy**: >55% on held-out test dataset
-- **Backtested ROI**: Simulated profit/loss from model recommendations
-- **Model Calibration**: Predicted probabilities align with actual outcomes
+### Prerequisites
+- Docker installed and running on your system.
+- Git for cloning the repository.
 
-## Tech Stack
+### 1. Build the Docker Image
+First, build the Docker image. This command packages all the application code and dependencies.
 
-- **Language**: Python
-- **Core Libraries**: pandas, NumPy, scikit-learn, XGBoost, LightGBM
-- **Web Scraping**: requests, BeautifulSoup4, Selenium/Playwright
-- **Database**: PostgreSQL/SQLite
-- **Automation**: Cron jobs/Task Scheduler
+```bash
+docker build -t sports-model .
+```
 
-## Project Structure
+### 2. Run the Training Pipeline
+To run the full data processing and model training pipeline for a specific season, use the following command. This will generate the necessary data, train the model, and save the versioned outputs inside the container.
+
+```bash
+# Example for the 2023-2024 season
+docker run --rm -v ./data:/app/data -v ./analysis_results:/app/analysis_results sports-model train --season "2023-2024"
+```
+- `-v ./data:/app/data`: This mounts your local `data` directory into the container, so the trained models are saved to your machine.
+- `-v ./analysis_results:/app/analysis_results`: This mounts the `analysis_results` directory to save the evaluation plots locally.
+
+### 3. Make Predictions
+To make predictions using the latest trained model, run:
+
+```bash
+# This will use the latest model by default
+docker run --rm -v ./data:/app/data sports-model predict
+```
+*Note: The prediction script `run_prediction.py` will need to be updated to load the versioned model.*
+
+---
+
+## 🤖 CI/CD Pipeline
+
+This project uses GitHub Actions for Continuous Integration and Continuous Deployment. The workflow is defined in `.github/workflows/main.yml` and includes:
+- **Linting**: Uses `ruff` to check for code style and quality.
+- **Testing**: Runs the test suite with `pytest`.
+- **Docker Build**: Builds the Docker image to ensure it's always valid.
+
+This pipeline automatically runs on every push and pull request to the `main` branch, ensuring the project is always in a stable state.
+
+---
+
+## 📂 Project Structure
 
 ```
 Sports_Model/
-├── data/                   # Data storage
-│   ├── raw/               # Raw scraped data
-│   ├── processed/         # Cleaned and processed data
-│   └── models/            # Trained model files
-├── src/                   # Source code
-│   ├── data_collection/   # Web scraping and data acquisition
-│   ├── preprocessing/     # Data cleaning and feature engineering
-│   ├── modeling/          # Model training and evaluation
-│   ├── prediction/        # Live prediction pipeline
-│   └── utils/             # Utility functions
-├── notebooks/             # Jupyter notebooks for analysis
-├── config/                # Configuration files
-├── tests/                 # Unit tests
-└── requirements.txt       # Python dependencies
+├── .github/workflows/    # CI/CD pipeline configuration
+├── data/                 # Data storage (ignored by Git)
+├── analysis_results/     # Model analysis plots (ignored by Git)
+├── src/                  # Source code
+├── tests/                # Unit and integration tests
+├── Dockerfile            # Docker configuration
+├── main.py               # Main CLI entrypoint
+└── requirements.txt      # Python dependencies
 ```
-
-## Installation
-
-1. Clone the repository
-2. Install dependencies: `pip install -r requirements.txt`
-3. Set up database configuration
-4. Configure API keys and credentials
-
-## Usage
-
-1. **Data Collection**: Run scraping scripts to collect historical and live data
-2. **Model Training**: Execute the training pipeline
-3. **Predictions**: Run daily prediction workflow
-4. **Analysis**: Review results and model performance
 
 ## Disclaimer
 
-This project is for educational and technical purposes only. It is not financial advice. All betting involves risk. Web scraping must be done ethically and in accordance with websites' terms of service.
+This project is for educational and technical purposes only. It is not financial advice. All betting involves risk.
 
 ## License
 

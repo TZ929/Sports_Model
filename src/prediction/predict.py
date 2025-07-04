@@ -25,7 +25,7 @@ logging.basicConfig(
     ]
 )
 
-def load_model(model_path="data/models/advanced_model.joblib"):
+def load_model(model_path: str | Path = "data/models/advanced_model.joblib"):
     """Loads the trained model from the specified path."""
     logging.info(f"Loading model from {model_path}...")
     try:
