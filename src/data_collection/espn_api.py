@@ -10,6 +10,7 @@ from datetime import datetime
 from src.utils.database import db_manager
 from sqlalchemy import text
 from bs4 import BeautifulSoup
+import calendar
 
 logger = logging.getLogger(__name__)
 
@@ -102,77 +103,101 @@ class ESPNAPICollector:
         return all_players
     
     def get_games(self, season: str = "2024") -> List[Dict[str, Any]]:
-        """Get NBA games for a season.
+        """Get NBA games for a season by iterating through the season dates.
         
         Args:
-            season: NBA season (e.g., "2024" for 2023-24 season)
+            season (str): NBA season (e.g., "2024" for 2023-24 season)
             
         Returns:
             List of game dictionaries
         """
-        url = f"{self.base_url}/scoreboard"
+        all_games = []
+        season_start_year = int(season) - 1
+        season_year = int(season)
         
-        try:
-            response = requests.get(url, headers=self.headers, timeout=30)
-            response.raise_for_status()
-            data = response.json()
+        # Iterate from October (start of season) to June of the next year (end of season)
+        # Months for the first part of the season (e.g., Oct, Nov, Dec 2023)
+        for month in range(10, 13):
+            num_days = calendar.monthrange(season_start_year, month)[1]
+            for day in range(1, num_days + 1):
+                date_str = f"{season_start_year}{month:02d}{day:02d}"
+                url = f"{self.base_url}/scoreboard?dates={date_str}"
+                all_games.extend(self._fetch_games_from_url(url, season))
+                time.sleep(0.5) # Be respectful to the API
+
+        # Months for the second part of the season (e.g., Jan-Jun 2024)
+        for month in range(1, 7):
+            num_days = calendar.monthrange(season_year, month)[1]
+            for day in range(1, num_days + 1):
+                date_str = f"{season_year}{month:02d}{day:02d}"
+                url = f"{self.base_url}/scoreboard?dates={date_str}"
+                all_games.extend(self._fetch_games_from_url(url, season))
+                time.sleep(0.5) # Be respectful to the API
             
-            games = []
-            events = data.get('events', [])
-            
-            for event in events:
-                try:
-                    # Get team info
-                    competitions = event.get('competitions', [{}])[0]
-                    competitors = competitions.get('competitors', [])
-                    
-                    if len(competitors) != 2:
+        logger.info(f"Retrieved {len(all_games)} games from ESPN API for the {season} season.")
+        return all_games
+
+    def _fetch_games_from_url(self, url: str, season: str) -> List[Dict[str, Any]]:
+        """Helper to fetch and parse games from a specific scoreboard URL."""
+        retries = 3
+        for i in range(retries):
+            try:
+                response = requests.get(url, headers=self.headers, timeout=30)
+                response.raise_for_status()
+                data = response.json()
+                
+                games = []
+                events = data.get('events', [])
+                
+                for event in events:
+                    try:
+                        competitions = event.get('competitions', [{}])[0]
+                        competitors = competitions.get('competitors', [])
+                        
+                        if len(competitors) != 2:
+                            continue
+                        
+                        home_team, away_team = None, None
+                        for competitor in competitors:
+                            if competitor.get('homeAway') == 'home':
+                                home_team = competitor.get('team', {})
+                            else:
+                                away_team = competitor.get('team', {})
+                        
+                        if not home_team or not away_team:
+                            continue
+                        
+                        date_str = event.get('date', '')
+                        game_date = datetime.fromisoformat(date_str.replace('Z', '+00:00')) if date_str else datetime.now()
+                        
+                        game_info = {
+                            'game_id': event.get('id', ''),
+                            'date': game_date,
+                            'home_team_id': home_team.get('abbreviation', ''),
+                            'away_team_id': away_team.get('abbreviation', ''),
+                            'home_team_name': home_team.get('name', ''),
+                            'away_team_name': away_team.get('name', ''),
+                            'home_score': int(home_team.get('score', '0')),
+                            'away_score': int(away_team.get('score', '0')),
+                            'season': season,
+                            'league': 'NBA'
+                        }
+                        games.append(game_info)
+                        
+                    except Exception as e:
+                        logger.error(f"Error parsing a game event: {e}")
                         continue
-                    
-                    home_team = None
-                    away_team = None
-                    
-                    for competitor in competitors:
-                        if competitor.get('homeAway') == 'home':
-                            home_team = competitor.get('team', {})
-                        else:
-                            away_team = competitor.get('team', {})
-                    
-                    if not home_team or not away_team:
-                        continue
-                    
-                    # Get scores
-                    home_score = home_team.get('score', '0')
-                    away_score = away_team.get('score', '0')
-                    
-                    # Get game date
-                    date_str = event.get('date', '')
-                    game_date = datetime.fromisoformat(date_str.replace('Z', '+00:00')) if date_str else datetime.now()
-                    
-                    game_info = {
-                        'game_id': f"ESPN_{event.get('id', '')}",
-                        'game_date': game_date,
-                        'home_team_id': home_team.get('abbreviation', ''),
-                        'away_team_id': away_team.get('abbreviation', ''),
-                        'home_team_name': home_team.get('name', ''),
-                        'away_team_name': away_team.get('name', ''),
-                        'home_score': int(home_score) if home_score.isdigit() else 0,
-                        'away_score': int(away_score) if away_score.isdigit() else 0,
-                        'season': season,
-                        'league': 'NBA'
-                    }
-                    games.append(game_info)
-                    
-                except Exception as e:
-                    logger.error(f"Error parsing game: {e}")
-                    continue
-            
-            logger.info(f"Retrieved {len(games)} games from ESPN API")
-            return games
-            
-        except Exception as e:
-            logger.error(f"Error getting games from ESPN: {e}")
-            return []
+                
+                return games
+                
+            except Exception as e:
+                logger.warning(f"Attempt {i+1} failed for URL {url}: {e}")
+                if i < retries - 1:
+                    time.sleep(5)  # Wait 5 seconds before retrying
+                else:
+                    logger.error(f"Error getting games from URL {url} after {retries} retries: {e}")
+                    return []
+        return []
     
     def get_player_stats(self, player_id: str, season: str = "2024") -> List[Dict[str, Any]]:
         """Get game-by-game statistics for a specific player.
@@ -244,338 +269,108 @@ class ESPNAPICollector:
         if save_to_db:
             for game in games:
                 game_db = dict(game)
-                # Rename 'game_date' to 'date' to match the Games table
-                if 'game_date' in game_db:
-                    game_db['date'] = game_db.pop('game_date')
                 if db_manager.insert_game(game_db):
                     counts['games'] += 1
         
-        logger.info(f"ESPN API collection completed: {counts}")
+        # Collect player stats (now by game)
+        # This part will be orchestrated by the new script
+        
+        logger.info(f"ESPN API data collection summary for {season}: {counts}")
         return counts
 
     def get_player_game_stats(self, player_id: str, season: str = "2024") -> list:
-        """Fetch game-by-game stats for a player from ESPN."""
-        url = f"https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/{player_id}/stats"
+        """
+        [DEPRECATED] This method is not reliable for comprehensive data collection.
+        It is kept for legacy purposes but should not be used for new development.
+        """
+        logger.warning("The 'get_player_game_stats' method is deprecated and should not be used.")
+        return []
+
+    def collect_all_player_game_stats(self, season: str = "2024", limit: int = 10, save_to_db: bool = True):
+        """
+        [DEPRECATED] This method is not reliable for comprehensive data collection.
+        It is kept for legacy purposes but should not be used for new development.
+        """
+        logger.warning("The 'collect_all_player_game_stats' method is deprecated and should not be used.")
+        pass
+
+    def get_box_score(self, game_id: str) -> List[Dict[str, Any]]:
+        """Get box score for a specific game.
+        
+        Args:
+            game_id: ESPN game ID
+            
+        Returns:
+            List of player stats dictionaries
+        """
+        url = f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event={game_id}"
+        
         try:
             response = requests.get(url, headers=self.headers, timeout=30)
             response.raise_for_status()
             data = response.json()
-            stats = []
             
-            # ESPN API structure: data['categories'][0]['events'] contains game-by-game stats
-            for category in data.get('categories', []):
-                for event in category.get('events', []):
-                    event_id = event.get('eventId', '')
-                    event_stats = event.get('stats', [])
-                    
-                    # ESPN stats array format (from glossary):
-                    # [MIN, FG, FG%, 3PT, 3P%, FT, FT%, REB, AST, STL, BLK, TO, PF, PTS]
-                    if len(event_stats) >= 14:
-                        stat = {
-                            'game_id': f"ESPN_{event_id}",
-                            'player_id': player_id,
-                            'team_id': '',  # Will need to get from team info
-                            'minutes_played': int(event_stats[0]) if event_stats[0].isdigit() else 0,
-                            'field_goals_made': int(event_stats[1].split('-')[0]) if '-' in event_stats[1] else 0,
-                            'field_goals_attempted': int(event_stats[1].split('-')[1]) if '-' in event_stats[1] else 0,
-                            'three_pointers_made': int(event_stats[3].split('-')[0]) if '-' in event_stats[3] else 0,
-                            'three_pointers_attempted': int(event_stats[3].split('-')[1]) if '-' in event_stats[3] else 0,
-                            'free_throws_made': int(event_stats[5].split('-')[0]) if '-' in event_stats[5] else 0,
-                            'free_throws_attempted': int(event_stats[5].split('-')[1]) if '-' in event_stats[5] else 0,
-                            'rebounds': int(event_stats[7]) if event_stats[7].isdigit() else 0,
-                            'offensive_rebounds': 0,  # Not provided in ESPN API
-                            'defensive_rebounds': 0,  # Not provided in ESPN API
-                            'assists': int(event_stats[8]) if event_stats[8].isdigit() else 0,
-                            'steals': int(event_stats[9]) if event_stats[9].isdigit() else 0,
-                            'blocks': int(event_stats[10]) if event_stats[10].isdigit() else 0,
-                            'turnovers': int(event_stats[11]) if event_stats[11].isdigit() else 0,
-                            'personal_fouls': int(event_stats[12]) if event_stats[12].isdigit() else 0,
-                            'points': int(event_stats[13]) if event_stats[13].isdigit() else 0,
-                            'plus_minus': 0  # Not provided in ESPN API
-                        }
-                        stats.append(stat)
+            player_stats = []
             
-            logger.info(f"Retrieved {len(stats)} game stats for player {player_id}")
-            return stats
-        except Exception as e:
-            logger.error(f"Error fetching game stats for player {player_id}: {e}")
-            return []
+            # The player data is nested inside the 'boxscore' -> 'players' structure
+            boxscore_players = data.get('boxscore', {}).get('players', [])
 
-    def collect_all_player_game_stats(self, season: str = "2024", limit: int = 10, save_to_db: bool = True):
-        """Collect and store game stats for all players in the database (ESPN IDs)."""
-        from src.utils.database import db_manager
-        import time
-        session = db_manager.get_session()
-        # Get all non-BR player IDs and filter for numeric ones
-        all_player_ids = [row[0] for row in session.execute(text("SELECT player_id FROM players WHERE player_id NOT LIKE 'BR_%' LIMIT :limit"), {'limit': limit * 2})]
-        # Filter for valid ESPN player IDs (numeric only)
-        player_ids = [pid for pid in all_player_ids if pid.isdigit()]
-        session.close()
-        total_stats = 0
-        for player_id in player_ids:
-            # Skip obviously invalid player IDs (like '2024' which is probably a team name)
-            if player_id == '2024' or len(player_id) < 6:
-                logger.info(f"Skipping invalid player ID: {player_id}")
-                continue
-                
-            stats = self.get_player_game_stats(player_id, season)
-            if save_to_db:
-                for stat in stats:
-                    db_manager.insert_player_stats(stat)
-            total_stats += len(stats)
-            time.sleep(1)
-        logger.info(f"Collected and stored {total_stats} player game stats from ESPN.")
-
-    def get_player_game_logs_web(self, player_id: str, player_name: str = "", season: str = "2024") -> List[Dict[str, Any]]:
-        """Get game-by-game statistics for a specific player from ESPN web pages.
-        
-        Args:
-            player_id: ESPN player ID
-            player_name: Player name for URL (optional, will be derived if not provided)
-            season: NBA season
-            
-        Returns:
-            List of game statistics dictionaries
-        """
-        import requests
-        from bs4 import BeautifulSoup
-        import time
-        
-        # Construct the ESPN game log URL
-        if player_name:
-            # Convert player name to URL format (lowercase, hyphens)
-            player_name_url = player_name.lower().replace(' ', '-')
-            url = f"https://www.espn.com/nba/player/gamelog/_/id/{player_id}/{player_name_url}"
-        else:
-            # Try with just the ID
-            url = f"https://www.espn.com/nba/player/gamelog/_/id/{player_id}"
-        
-        try:
-            response = requests.get(url, headers=self.headers, timeout=30)
-            response.raise_for_status()
-            
-            soup = BeautifulSoup(response.content, 'html.parser')
-            
-            # Find the game log table
-            # ESPN typically uses a table with class containing 'gamelog' or similar
-            game_log_table = soup.find('table', class_=lambda x: x and 'gamelog' in x.lower() if x else False)
-            
-            if not game_log_table:
-                # Try alternative table selectors
-                game_log_table = soup.find('table', class_='Table')
-            
-            if not game_log_table:
-                logger.warning(f"Game log table not found for player {player_id}")
-                return []
-            
-            stats = []
-            tbody = game_log_table.find('tbody')
-            if not tbody:
-                logger.warning(f"No tbody found in game log table for player {player_id}")
-                return []
-                
-            rows = tbody.find_all('tr')
-            
-            for row in rows:
-                # Skip header rows
-                row_classes = row.get('class', [])
-                if isinstance(row_classes, str):
-                    row_classes = [row_classes]
-                if 'thead' in row_classes:
+            for team_stats in boxscore_players:
+                team_info = team_stats.get('team', {})
+                if not team_info:
                     continue
                 
-                cells = row.find_all(['td', 'th'])
-                if len(cells) < 10:  # Need at least basic stats
-                    continue
-                
-                try:
-                    # Extract game information
-                    # ESPN game log format typically: Date, OPP, RESULT, MIN, FG, FG%, 3PT, 3P%, FT, FT%, REB, AST, STL, BLK, TO, PF, PTS, +/- 
-                    game_date = self._parse_espn_date(cells[0].get_text(strip=True))
-                    if not game_date:
-                        continue
-                    
-                    opponent = cells[1].get_text(strip=True)
-                    result = cells[2].get_text(strip=True)
-                    minutes = self._parse_minutes(cells[3].get_text(strip=True))
-                    
-                    # Parse shooting stats (FG, 3PT, FT)
-                    fg_str = cells[4].get_text(strip=True)  # e.g., "8-15"
-                    fg_made, fg_attempted = self._parse_shot_attempts(fg_str)
-                    
-                    three_pt_str = cells[6].get_text(strip=True)  # e.g., "2-5"
-                    three_made, three_attempted = self._parse_shot_attempts(three_pt_str)
-                    
-                    ft_str = cells[8].get_text(strip=True)  # e.g., "4-6"
-                    ft_made, ft_attempted = self._parse_shot_attempts(ft_str)
-                    
-                    # Other stats
-                    rebounds = int(cells[10].get_text(strip=True)) if cells[10].get_text(strip=True).isdigit() else 0
-                    assists = int(cells[11].get_text(strip=True)) if cells[11].get_text(strip=True).isdigit() else 0
-                    steals = int(cells[12].get_text(strip=True)) if cells[12].get_text(strip=True).isdigit() else 0
-                    blocks = int(cells[13].get_text(strip=True)) if cells[13].get_text(strip=True).isdigit() else 0
-                    turnovers = int(cells[14].get_text(strip=True)) if cells[14].get_text(strip=True).isdigit() else 0
-                    personal_fouls = int(cells[15].get_text(strip=True)) if cells[15].get_text(strip=True).isdigit() else 0
-                    points = int(cells[16].get_text(strip=True)) if cells[16].get_text(strip=True).isdigit() else 0
-                    
-                    # Plus/minus (if available)
-                    plus_minus = 0
-                    if len(cells) > 17:
-                        pm_text = cells[17].get_text(strip=True)
-                        if pm_text and pm_text != '-':
-                            try:
-                                plus_minus = int(pm_text)
-                            except ValueError:
-                                plus_minus = 0
-                    
-                    # Create game stat record
-                    game_stat = {
-                        'game_id': f"ESPN_{player_id}_{game_date.strftime('%Y%m%d')}",
-                        'player_id': player_id,
-                        'game_date': game_date,
-                        'opponent': opponent,
-                        'result': result,
-                        'minutes_played': minutes,
-                        'field_goals_made': fg_made,
-                        'field_goals_attempted': fg_attempted,
-                        'three_pointers_made': three_made,
-                        'three_pointers_attempted': three_attempted,
-                        'free_throws_made': ft_made,
-                        'free_throws_attempted': ft_attempted,
-                        'rebounds': rebounds,
-                        'assists': assists,
-                        'steals': steals,
-                        'blocks': blocks,
-                        'turnovers': turnovers,
-                        'personal_fouls': personal_fouls,
-                        'points': points,
-                        'plus_minus': plus_minus,
-                        'season': season
-                    }
-                    
-                    stats.append(game_stat)
-                    
-                except (ValueError, IndexError) as e:
-                    logger.warning(f"Error parsing game stat row for {player_id}: {e}")
-                    continue
-            
-            logger.info(f"Retrieved {len(stats)} game stats for player {player_id}")
-            return stats
-            
-        except Exception as e:
-            logger.error(f"Error getting game logs for player {player_id}: {e}")
-            return []
-    
-    def _parse_espn_date(self, date_str: str) -> Optional[datetime]:
-        """Parse ESPN date string to datetime object.
-        
-        Args:
-            date_str: Date string from ESPN (e.g., "Oct 25, 2023")
-            
-        Returns:
-            Datetime object or None if invalid
-        """
-        if not date_str or date_str == '':
-            return None
-        
-        try:
-            # ESPN format: "Oct 25, 2023"
-            return datetime.strptime(date_str, '%b %d, %Y')
-        except ValueError:
-            try:
-                # Alternative format: "10/25/2023"
-                return datetime.strptime(date_str, '%m/%d/%Y')
-            except ValueError:
-                logger.warning(f"Could not parse date: {date_str}")
-                return None
-    
-    def _parse_shot_attempts(self, shot_str: str) -> tuple:
-        """Parse shot attempts string (e.g., "8-15") to made and attempted.
-        
-        Args:
-            shot_str: Shot string in format "made-attempted"
-            
-        Returns:
-            Tuple of (made, attempted) or (0, 0) if invalid
-        """
-        if not shot_str or shot_str == '' or shot_str == '-':
-            return (0, 0)
-        
-        try:
-            if '-' in shot_str:
-                made, attempted = shot_str.split('-')
-                return (int(made), int(attempted))
-            else:
-                # Single number (probably made)
-                return (int(shot_str), 0)
-        except (ValueError, IndexError):
-            return (0, 0)
+                team_id = team_info.get('id')
 
-    def collect_player_game_logs_web(self, season: str = "2024", limit: int = 10, save_to_db: bool = True):
-        """Collect game logs for players using ESPN web scraping."""
-        from src.utils.database import db_manager
-        from sqlalchemy import text
-        import time
-        
-        session = db_manager.get_session()
-        
-        # Get valid ESPN player IDs with names
-        query = text("""
-            SELECT player_id, full_name FROM players 
-            WHERE player_id NOT LIKE 'BR_%' 
-            AND player_id REGEXP '^[0-9]+$'
-            AND full_name IS NOT NULL
-            LIMIT :limit
-        """)
-        
-        result = session.execute(query, {'limit': limit})
-        players = result.fetchall()
-        session.close()
-        
-        total_stats = 0
-        successful_players = 0
-        
-        for i, (player_id, player_name) in enumerate(players):
-            try:
-                logger.info(f"Collecting game logs for player {i+1}/{len(players)}: {player_name} ({player_id})")
-                
-                stats = self.get_player_game_logs_web(player_id, player_name, season)
-                
-                if stats:
-                    total_stats += len(stats)
-                    successful_players += 1
+                for player_data in team_stats.get('statistics', []):
+                    # The first item in statistics is the labels, not a player
+                    labels = [label.lower() for label in player_data.get('labels', [])]
                     
-                    if save_to_db:
-                        for stat in stats:
-                            # Convert to database format
-                            db_stat = {
-                                'game_id': stat['game_id'],
-                                'player_id': stat['player_id'],
-                                'game_date': stat['game_date'],
-                                'minutes_played': stat['minutes_played'],
-                                'field_goals_made': stat['field_goals_made'],
-                                'field_goals_attempted': stat['field_goals_attempted'],
-                                'three_pointers_made': stat['three_pointers_made'],
-                                'three_pointers_attempted': stat['three_pointers_attempted'],
-                                'free_throws_made': stat['free_throws_made'],
-                                'free_throws_attempted': stat['free_throws_attempted'],
-                                'rebounds': stat['rebounds'],
-                                'assists': stat['assists'],
-                                'steals': stat['steals'],
-                                'blocks': stat['blocks'],
-                                'turnovers': stat['turnovers'],
-                                'personal_fouls': stat['personal_fouls'],
-                                'points': stat['points'],
-                                'plus_minus': stat['plus_minus']
+                    for athlete_stats in player_data.get('athletes', []):
+                        try:
+                            athlete_info = athlete_stats.get('athlete', {})
+                            player_id = athlete_info.get('id')
+
+                            if not player_id or athlete_stats.get('didNotPlay'):
+                                continue
+
+                            stats_values = athlete_stats.get('stats', [])
+                            stats_dict = dict(zip(labels, stats_values))
+
+                            fgm_fga = stats_dict.get('fg', '0-0').split('-')
+                            tpm_tpa = stats_dict.get('3pt', '0-0').split('-')
+                            ftm_fta = stats_dict.get('ft', '0-0').split('-')
+
+                            player_entry = {
+                                'game_id': game_id,
+                                'player_id': player_id,
+                                'team_id': team_id,
+                                'minutes_played': int(stats_dict.get('min', 0)),
+                                'field_goals_made': int(fgm_fga[0]),
+                                'field_goals_attempted': int(fgm_fga[1]),
+                                'three_pointers_made': int(tpm_tpa[0]),
+                                'three_pointers_attempted': int(tpm_tpa[1]),
+                                'free_throws_made': int(ftm_fta[0]),
+                                'free_throws_attempted': int(ftm_fta[1]),
+                                'rebounds': int(stats_dict.get('reb', 0)),
+                                'offensive_rebounds': int(stats_dict.get('oreb', 0)),
+                                'assists': int(stats_dict.get('ast', 0)),
+                                'steals': int(stats_dict.get('stl', 0)),
+                                'blocks': int(stats_dict.get('blk', 0)),
+                                'turnovers': int(stats_dict.get('to', 0)),
+                                'personal_fouls': int(stats_dict.get('pf', 0)),
+                                'points': int(stats_dict.get('pts', 0)),
+                                'plus_minus': int(stats_dict.get('+/-', 0))
                             }
-                            db_manager.insert_player_stats(db_stat)
-                
-                # Be respectful with requests
-                time.sleep(2)
-                
-            except Exception as e:
-                logger.error(f"Error collecting game logs for {player_name} ({player_id}): {e}")
-                continue
-        
-        logger.info(f"Web scraping completed: {successful_players} players, {total_stats} game stats collected")
-        return {'players': successful_players, 'stats': total_stats} 
+                            player_stats.append(player_entry)
+                        except (ValueError, IndexError) as e:
+                            logger.error(f"Error parsing stats for player in game {game_id}: {e}", exc_info=True)
+                            continue
+            return player_stats
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"API request error for game {game_id}: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"An unexpected error occurred processing game {game_id}: {e}", exc_info=True)
+            return [] 

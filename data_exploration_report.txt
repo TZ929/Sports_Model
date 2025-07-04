@@ -7,7 +7,7 @@ DATA EXPLORATION REPORT - PHASE 3 PLANNING
 Teams: 39
 Players: 107 (Valid: 107)
 Games: 55
-Player Stats: 221
+Player Stats: 491
 
 🔍 DATA QUALITY ISSUES
 ------------------------------
@@ -18,12 +18,12 @@ games_without_scores: 0
 
 🏀 PLAYER STATISTICS ANALYSIS
 ------------------------------
-Total Stats: 221
+Total Stats: 491
 Unique Players: 43
 Unique Games: 221
-Average Points: 11.0
-Average Rebounds: 4.2
-Average Assists: 2.8
+Average Points: 11.2
+Average Rebounds: 4.1
+Average Assists: 2.9
 Points Range: 0 - 28
 
 🚀 FEATURE ENGINEERING OPPORTUNITIES

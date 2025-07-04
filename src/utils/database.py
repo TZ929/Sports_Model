@@ -5,7 +5,7 @@ Database utilities for the NBA/WNBA predictive model.
 import logging
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean, Text
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean, Text, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.sql import text
@@ -156,11 +156,19 @@ class Teams(Base):
 class DatabaseManager:
     """Database manager for the sports model."""
     
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(DatabaseManager, cls).__new__(cls)
+            cls._instance.engine = None
+            cls._instance.SessionLocal = None
+            cls._instance._setup_connection()
+        return cls._instance
+
     def __init__(self):
         """Initialize database connection."""
-        self.engine = None
-        self.SessionLocal = None
-        self._setup_connection()
+        pass  # Init is handled in __new__ to ensure it only runs once
     
     def _setup_connection(self):
         """Set up database connection."""
@@ -176,8 +184,9 @@ class DatabaseManager:
     def create_tables(self):
         """Create all database tables."""
         try:
-            Base.metadata.create_all(bind=self.engine)
-            logger.info("Database tables created successfully")
+            if self.engine:
+                Base.metadata.create_all(bind=self.engine)
+                logger.info("Database tables created successfully")
         except Exception as e:
             logger.error(f"Failed to create database tables: {e}")
             raise
@@ -210,7 +219,7 @@ class DatabaseManager:
             logger.error(f"Failed to insert game: {e}")
             return False
     
-    def insert_player_stats(self, stats_data: Dict[str, Any]) -> bool:
+    def insert_player_game_stats(self, stats_data: Dict[str, Any]) -> bool:
         """Insert player game statistics.
         
         Args:
@@ -221,8 +230,23 @@ class DatabaseManager:
         """
         try:
             with self.get_session() as session:
-                stats = PlayerGameStats(**stats_data)
-                session.add(stats)
+                # Check if the record already exists
+                existing_stat = session.query(PlayerGameStats).filter_by(
+                    game_id=stats_data.get('game_id'),
+                    player_id=stats_data.get('player_id')
+                ).first()
+                
+                if existing_stat:
+                    # Update existing record
+                    for key, value in stats_data.items():
+                        setattr(existing_stat, key, value)
+                    logger.info(f"Updating stats for player {stats_data['player_id']} in game {stats_data['game_id']}")
+                else:
+                    # Insert new record
+                    stats = PlayerGameStats(**stats_data)
+                    session.add(stats)
+                    logger.info(f"Inserting stats for player {stats_data['player_id']} in game {stats_data['game_id']}")
+                
                 session.commit()
                 return True
         except Exception as e:
@@ -249,80 +273,72 @@ class DatabaseManager:
             return False
     
     def get_games_by_date_range(self, start_date: datetime, end_date: datetime, league: str = 'NBA') -> List[Dict]:
-        """Get games within a date range.
-        
-        Args:
-            start_date: Start date for query
-            end_date: End date for query
-            league: League to filter by (NBA or WNBA)
-            
-        Returns:
-            List of game dictionaries
         """
-        try:
-            with self.get_session() as session:
-                games = session.query(Games).filter(
+        Retrieves all games within a given date range.
+        """
+        with self.get_session() as session:
+            try:
+                result = session.query(Games).filter(
                     Games.date >= start_date,
                     Games.date <= end_date,
                     Games.league == league
                 ).all()
                 
-                return [self._row_to_dict(game) for game in games]
-        except Exception as e:
-            logger.error(f"Failed to get games by date range: {e}")
-            return []
-    
+                return [self._row_to_dict(row) for row in result]
+            except Exception as e:
+                logger.error(f"Error fetching games by date range: {e}")
+                return []
+
     def get_player_stats_by_game(self, game_id: str) -> List[Dict]:
-        """Get all player statistics for a specific game.
-        
-        Args:
-            game_id: Game identifier
-            
-        Returns:
-            List of player statistics dictionaries
         """
-        try:
-            with self.get_session() as session:
-                stats = session.query(PlayerGameStats).filter(
+        Retrieves all player stats for a given game.
+        """
+        with self.get_session() as session:
+            try:
+                result = session.query(PlayerGameStats).filter(
                     PlayerGameStats.game_id == game_id
                 ).all()
-                
-                return [self._row_to_dict(stat) for stat in stats]
-        except Exception as e:
-            logger.error(f"Failed to get player stats by game: {e}")
-            return []
-    
+                return [self._row_to_dict(row) for row in result]
+            except Exception as e:
+                logger.error(f"Error fetching player stats for game {game_id}: {e}")
+                return []
+
     def get_latest_prop_odds(self, game_id: str, sportsbook: str) -> List[Dict]:
-        """Get latest prop odds for a game from a specific sportsbook.
-        
-        Args:
-            game_id: Game identifier
-            sportsbook: Sportsbook name
-            
-        Returns:
-            List of prop odds dictionaries
         """
-        try:
-            with self.get_session() as session:
-                # Get the latest odds for each prop type
-                latest_odds = session.query(PropOdds).filter(
+        Retrieves the latest prop odds for a game from a specific sportsbook.
+        """
+        with self.get_session() as session:
+            try:
+                # Find the latest timestamp for the given game and sportsbook
+                latest_timestamp = session.query(func.max(PropOdds.timestamp)).filter(
                     PropOdds.game_id == game_id,
                     PropOdds.sportsbook == sportsbook
-                ).order_by(PropOdds.timestamp.desc()).all()
-                
-                return [self._row_to_dict(odds) for odds in latest_odds]
-        except Exception as e:
-            logger.error(f"Failed to get latest prop odds: {e}")
-            return []
-    
+                ).scalar()
+
+                if not latest_timestamp:
+                    return []
+
+                # Retrieve all odds that match the latest timestamp
+                result = session.query(PropOdds).filter(
+                    PropOdds.game_id == game_id,
+                    PropOdds.sportsbook == sportsbook,
+                    PropOdds.timestamp == latest_timestamp
+                ).all()
+
+                return [self._row_to_dict(row) for row in result]
+            except Exception as e:
+                logger.error(f"Error fetching latest prop odds for game {game_id}: {e}")
+                return []
+
     def _row_to_dict(self, row) -> Dict:
-        """Convert SQLAlchemy row to dictionary."""
-        return {column.name: getattr(row, column.name) for column in row.__table__.columns}
+        return {c.name: getattr(row, c.name) for c in row.__table__.columns}
 
     def insert_team(self, team_data: Dict[str, Any]) -> bool:
         """Insert a new team record.
+        
         Args:
             team_data: Dictionary containing team information
+        
         Returns:
             True if successful, False otherwise
         """
@@ -331,7 +347,6 @@ class DatabaseManager:
                 team = Teams(**team_data)
                 session.add(team)
                 session.commit()
-                logger.info(f"Team inserted: {team_data.get('team_id')}")
                 return True
         except Exception as e:
             logger.error(f"Failed to insert team: {e}")
@@ -339,8 +354,10 @@ class DatabaseManager:
 
     def insert_player(self, player_data: Dict[str, Any]) -> bool:
         """Insert a new player record.
+        
         Args:
             player_data: Dictionary containing player information
+        
         Returns:
             True if successful, False otherwise
         """
@@ -349,12 +366,20 @@ class DatabaseManager:
                 player = Players(**player_data)
                 session.add(player)
                 session.commit()
-                logger.info(f"Player inserted: {player_data.get('player_id')}")
                 return True
         except Exception as e:
             logger.error(f"Failed to insert player: {e}")
             return False
 
+    def get_game_by_id(self, game_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve a single game by its ID."""
+        with self.get_session() as session:
+            try:
+                game = session.query(Games).filter_by(game_id=game_id).first()
+                return self._row_to_dict(game) if game else None
+            except Exception as e:
+                logger.error(f"Error fetching game {game_id}: {e}")
+                return None
 
-# Global database manager instance
+
 db_manager = DatabaseManager() 
