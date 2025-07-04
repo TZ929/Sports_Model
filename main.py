@@ -7,6 +7,8 @@ import argparse
 from pathlib import Path
 import click
 
+from run_pipeline import run_data_pipeline
+from retrain_model import retrain as retrain_model_pipeline
 from src.utils.config import config
 from src.utils.database import db_manager
 
@@ -87,18 +89,34 @@ def scrape():
         return False
 
 @cli.command()
-def train():
+@click.option('--season', default=None, help='Season to train the model on (e.g., 2023-2024). Affects output file names.')
+def train(season):
     """Train predictive models."""
-    logger.info("Starting model training...")
+    logger.info("Starting model training pipeline...")
     
     try:
-        # Import and run model training
-        # This will be implemented in Phase 3
-        logger.info("Model training not yet implemented (Phase 3)")
+        # Step 1: Run the data pipeline to generate features
+        logger.info("Running data preparation pipeline...")
+        run_data_pipeline()
+        logger.info("Data preparation pipeline finished.")
+
+        # Step 2: Run the model retraining pipeline
+        logger.info("Running model retraining pipeline...")
+        
+        # Create a Namespace object to hold the arguments for the retraining script
+        args = argparse.Namespace(
+            season=season,
+            output_dir=".",  # Use current directory as root for outputs
+            input_file="data/processed/featured_data.csv" # This is the output of the data pipeline
+        )
+
+        retrain_model_pipeline(args)
+        
+        logger.info("Model training pipeline completed successfully!")
         return True
         
     except Exception as e:
-        logger.error(f"Error in model training: {e}")
+        logger.error(f"Error in model training: {e}", exc_info=True)
         return False
 
 @cli.command()

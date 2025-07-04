@@ -16,17 +16,16 @@ logging.basicConfig(
     ]
 )
 
-def load_final_dataset():
+def load_final_dataset(file_path: Path = Path("data/processed/featured_data.csv")):
     """Load the final master feature dataset."""
-    logging.info("Loading final feature dataset...")
-    processed_dir = Path("data/processed")
+    logging.info(f"Loading final feature dataset from {file_path}...")
     try:
         # Changed to load the new featured_data.csv
-        df = pd.read_csv(processed_dir / "featured_data.csv", parse_dates=['date'])
+        df = pd.read_csv(file_path, parse_dates=['date'])
         logging.info("Final dataset loaded successfully.")
         return df
     except FileNotFoundError as e:
-        logging.error(f"Error loading final dataset: {e}. Please ensure previous steps ran successfully.")
+        logging.error(f"Error loading final dataset from {file_path}: {e}. Please ensure previous steps ran successfully.")
         return None
 
 def prepare_modeling_data(df):
@@ -104,18 +103,23 @@ def prepare_modeling_data(df):
     
     return train_df, test_df
 
-def save_modeling_data(train_df, test_df):
+def save_modeling_data(
+    train_df, 
+    test_df, 
+    output_dir: Path = Path("data/processed"),
+    train_filename: str = "modeling_train.csv",
+    test_filename: str = "modeling_test.csv"
+):
     """Saves the training and testing dataframes to CSV files."""
     if train_df is None or test_df is None:
         logging.error("Training or testing dataframe is None. Cannot save.")
         return
 
-    logging.info("Saving modeling data...")
-    output_dir = Path("data/processed")
+    logging.info(f"Saving modeling data to {output_dir}...")
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    train_df.to_csv(output_dir / "modeling_train.csv", index=False)
-    test_df.to_csv(output_dir / "modeling_test.csv", index=False)
+    train_df.to_csv(output_dir / train_filename, index=False)
+    test_df.to_csv(output_dir / test_filename, index=False)
     
     logging.info(f"Modeling data saved to '{output_dir.resolve()}'")
 

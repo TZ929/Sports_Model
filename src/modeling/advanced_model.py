@@ -32,7 +32,11 @@ def load_modeling_data():
         logging.error(f"Error loading modeling data: {e}. Please run the data preparation script first.")
         return None, None
 
-def train_advanced_model(train_df):
+def train_advanced_model(
+    train_df, 
+    models_dir: Path = Path("data/models"),
+    model_filename: str = "advanced_model.joblib"
+):
     """Trains an advanced LightGBM model with optimized hyperparameters."""
     if train_df is None:
         logging.error("Training data is None. Aborting training.")
@@ -67,15 +71,20 @@ def train_advanced_model(train_df):
     logging.info("Tuned advanced model trained successfully.")
     
     # Save the trained model
-    models_dir = Path("data/models")
     models_dir.mkdir(exist_ok=True)
-    model_path = models_dir / "advanced_model.joblib"
+    model_path = models_dir / model_filename
     joblib.dump(model, model_path)
     logging.info(f"Model saved to {model_path}")
     
     return model
 
-def evaluate_model(model, test_df):
+def evaluate_model(
+    model, 
+    test_df, 
+    analysis_dir: Path = Path("analysis_results"),
+    confusion_matrix_filename: str = "advanced_model_confusion_matrix.png",
+    feature_importance_filename: str = "advanced_model_feature_importance.png"
+):
     """Evaluates the model on the test set and analyzes feature importance."""
     if model is None or test_df is None:
         logging.error("Model or test data is None. Aborting evaluation.")
@@ -109,9 +118,8 @@ def evaluate_model(model, test_df):
     plt.xlabel('Predicted')
     plt.ylabel('Actual')
     
-    analysis_dir = Path("analysis_results")
     analysis_dir.mkdir(exist_ok=True)
-    plt.savefig(analysis_dir / "advanced_model_confusion_matrix.png")
+    plt.savefig(analysis_dir / confusion_matrix_filename)
     plt.close()
     logging.info(f"Confusion matrix saved to '{analysis_dir.resolve()}'")
 
@@ -126,7 +134,7 @@ def evaluate_model(model, test_df):
     sns.barplot(x='importance', y='feature', data=feature_importances)
     plt.title('Feature Importance')
     plt.tight_layout()
-    plt.savefig(analysis_dir / "advanced_model_feature_importance.png")
+    plt.savefig(analysis_dir / feature_importance_filename)
     plt.close()
     logging.info(f"Feature importance plot saved to '{analysis_dir.resolve()}'")
 

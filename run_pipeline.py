@@ -86,7 +86,7 @@ def integrate_sportsbook_odds(features_df: pd.DataFrame, odds_df: pd.DataFrame) 
     logger.info("Sportsbook odds integration complete.")
     return merged_df
 
-def run_pipeline():
+def run_data_pipeline():
     """
     Executes the full data processing and feature engineering pipeline.
     """
@@ -128,4 +128,4 @@ def run_pipeline():
     logger.info(f"Pipeline complete. Processed data saved to {output_path}")
 
 if __name__ == "__main__":
-    run_pipeline() 
+    run_data_pipeline() 
