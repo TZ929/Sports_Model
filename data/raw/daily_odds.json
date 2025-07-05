@@ -1,0 +1,38 @@
+[
+    {
+        "sportsbook":"FanDuel",
+        "game_date":"2023-11-01",
+        "player_name":"Clint Capela",
+        "prop_type":"Rebounds",
+        "line":10.5,
+        "over_odds":-115,
+        "under_odds":-105
+    },
+    {
+        "sportsbook":"FanDuel",
+        "game_date":"2023-11-01",
+        "player_name":"Dominick Barlow",
+        "prop_type":"Points",
+        "line":4.5,
+        "over_odds":-110,
+        "under_odds":-110
+    },
+    {
+        "sportsbook":"ESPN BET",
+        "game_date":"2023-11-01",
+        "player_name":"Kobe Bufkin",
+        "prop_type":"Points",
+        "line":5.5,
+        "over_odds":-120,
+        "under_odds":100
+    },
+    {
+        "sportsbook":"ESPN BET",
+        "game_date":"2023-11-01",
+        "player_name":"Dyson Daniels",
+        "prop_type":"Assists",
+        "line":3.5,
+        "over_odds":-112,
+        "under_odds":-108
+    }
+]

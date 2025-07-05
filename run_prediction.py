@@ -1,15 +1,18 @@
-import argparse
 import sys
 import logging
 import json
 from pathlib import Path
+import pandas as pd
 
 # Add project root to the Python path
 sys.path.append(str(Path(__file__).resolve().parent))
 
 from src.prediction.predict import load_model, fetch_prediction_data, engineer_features, make_prediction
+from src.utils.player_matching import player_matcher
+from src.utils.game_finder import game_finder
+from src.utils.odds_conversion import find_value_opportunity, american_to_implied_probability
 
-# --- Structured Logging Setup ---
+# --- Main Application Logger ---
 class JsonFormatter(logging.Formatter):
     def format(self, record):
         log_record = {
@@ -34,7 +37,40 @@ def setup_logger():
     logger.addHandler(handler)
     return logger
 
+# --- Value Predictions Logger ---
+def setup_value_logger():
+    """Sets up a logger to output value bets to a dedicated file."""
+    value_logger = logging.getLogger('ValueLogger')
+    value_logger.setLevel(logging.INFO)
+    
+    # Prevent logs from propagating to the root logger
+    value_logger.propagate = False
+    
+    # Clear existing handlers
+    if value_logger.hasHandlers():
+        value_logger.handlers.clear()
+        
+    # File handler for the value bets
+    log_file = Path("logs/predictions.log")
+    log_file.parent.mkdir(exist_ok=True)
+    file_handler = logging.FileHandler(log_file)
+    
+    # Simple formatter for the log file, as requested in the plan
+    formatter = logging.Formatter('%(message)s')
+    file_handler.setFormatter(formatter)
+    
+    value_logger.addHandler(file_handler)
+    
+    # Add a header to the log file if it's new/empty
+    if log_file.stat().st_size == 0:
+        header = "Player | Prop | Line | Sportsbook | Model Probability | Implied Probability | Bet | Edge"
+        value_logger.info(header)
+        value_logger.info("-" * len(header))
+
+    return value_logger
+
 logger = setup_logger()
+value_logger = setup_value_logger()
 # --- End of Logging Setup ---
 
 def find_latest_model() -> tuple[Path, str] | tuple[None, None]:
@@ -63,62 +99,132 @@ def find_latest_model() -> tuple[Path, str] | tuple[None, None]:
     except StopIteration:
         return None, None
 
-def main():
-    """Main function to run the prediction CLI."""
-    parser = argparse.ArgumentParser(description="Make predictions for player performance in a given game.")
-    parser.add_argument("game_id", type=str, help="The ID of the game to predict.")
-    parser.add_argument("player_id", type=str, help="The ID of the player to predict for.")
-    
-    args = parser.parse_args()
-
-    # Find the latest model automatically
+def run_predictions_for_odds(odds_df: pd.DataFrame):
+    """
+    Runs the prediction pipeline for all props in the odds DataFrame.
+    """
+    # 1. Find the latest model
     model_path, season = find_latest_model()
     if not model_path:
-        logger.error(
-            "Prediction failed: No trained model found.",
-            extra={"extra_data": {"game_id": args.game_id, "player_id": args.player_id}}
-        )
+        logger.error("Prediction pipeline failed: No trained model found.")
         return
 
-    logger.info(
-        "Starting prediction process.", 
-        extra={"extra_data": {"game_id": args.game_id, "player_id": args.player_id, "model_path": str(model_path), "season": season}}
-    )
-
-    # 1. Load Model
+    logger.info("Loading latest model.", extra={"extra_data": {"model_path": str(model_path), "season": season}})
     model = load_model(model_path)
     if model is None:
-        logger.error("Prediction failed: Could not load the model.")
+        logger.error("Prediction pipeline failed: Could not load the model.")
         return
 
-    # 2. Fetch Data
-    raw_data = fetch_prediction_data(args.game_id, args.player_id)
-    if raw_data is None:
-        logger.error("Prediction failed: Could not fetch the required data.")
-        return
-
-    # 3. Engineer Features
-    features = engineer_features(raw_data)
-    if features.empty:
-        logger.error("Prediction failed: Could not engineer features from the data.")
-        return
+    # 2. Iterate through each prop bet
+    for _, row in odds_df.iterrows():
+        player_name = str(row['player_name'])
+        game_date = str(row['game_date'])
         
-    # 4. Make Prediction
-    result = make_prediction(model, features)
+        # 3. Match player name to player_id
+        player_id = player_matcher.get_player_id(player_name, score_cutoff=80)
+        if not player_id:
+            logger.warning(f"Skipping prediction for '{player_name}': Could not find player_id.", extra={"extra_data": row.to_dict()})
+            continue
 
-    if result:
-        prediction, proba = result
-        outcome = 'OVER' if prediction[0] == 1 else 'UNDER'
+        # 4. Find game_id
+        game_id = game_finder.find_game_id(player_id, game_date)
+        if not game_id:
+            logger.warning(f"Skipping prediction for '{player_name}': Could not find game_id for date {game_date}.", extra={"extra_data": row.to_dict()})
+            continue
+            
         logger.info(
-            "Prediction successful.",
-            extra={"extra_data": {
-                "outcome": outcome,
-                "probability_over": f"{proba[0][1]:.4f}",
-                "probability_under": f"{proba[0][0]:.4f}",
-            }}
+            "Making prediction for player.", 
+            extra={"extra_data": {"game_id": game_id, "player_id": player_id, "player_name": player_name}}
         )
-    else:
-        logger.error("Prediction failed during the final step.")
+
+        # 5. Fetch data, engineer features, and predict
+        raw_data = fetch_prediction_data(game_id, player_id)
+        if raw_data is None:
+            logger.error("Prediction failed: Could not fetch the required data.", extra={"extra_data": {"game_id": game_id, "player_id": player_id}})
+            continue
+
+        features = engineer_features(raw_data)
+        if features.empty:
+            logger.error("Prediction failed: Could not engineer features.", extra={"extra_data": {"game_id": game_id, "player_id": player_id}})
+            continue
+            
+        result = make_prediction(model, features)
+
+        if result:
+            prediction, proba = result
+            outcome = 'OVER' if prediction[0] == 1 else 'UNDER'
+            logger.info(
+                "Prediction successful.",
+                extra={"extra_data": {
+                    "game_id": game_id,
+                    "player_name": player_name,
+                    "prop_type": row['prop_type'],
+                    "line": row['line'],
+                    "outcome": outcome,
+                    "probability_over": f"{proba[0][1]:.4f}",
+                    "probability_under": f"{proba[0][0]:.4f}",
+                }}
+            )
+
+            # 7. Find Value Opportunity
+            over_odds = int(row['over_odds'])
+            under_odds = int(row['under_odds'])
+            
+            value_bet = find_value_opportunity(proba[0][1], over_odds, under_odds)
+            
+            if value_bet:
+                bet_type, edge = value_bet
+                
+                # Determine the relevant probabilities for logging
+                if bet_type == 'OVER':
+                    model_prob_log = proba[0][1]
+                    implied_prob_log = american_to_implied_probability(over_odds)
+                else: # UNDER
+                    model_prob_log = 1 - proba[0][1]
+                    implied_prob_log = american_to_implied_probability(under_odds)
+
+                # Log to the dedicated predictions file
+                log_message = (
+                    f"{player_name} | {row['prop_type']} | {row['line']} | "
+                    f"{row['sportsbook']} | {model_prob_log:.2%} | "
+                    f"{implied_prob_log:.2%} | {bet_type} | {edge:.2%}"
+                )
+                value_logger.info(log_message)
+                
+                # Also log to the main console logger for real-time visibility
+                logger.info("Value bet identified.", extra={"extra_data": row.to_dict()})
+
+        else:
+            logger.error("Prediction failed during the final step.", extra={"extra_data": {"game_id": game_id, "player_id": player_id}})
+
+
+def main():
+    """Main function to run the daily prediction pipeline."""
+    # This script now reads from a file instead of taking CLI arguments.
+    odds_file = Path("data/raw/daily_odds.json")
+    if not odds_file.exists():
+        logger.error(f"Prediction pipeline failed: Odds file not found at '{odds_file}'.")
+        # As a fallback, we could try to run the scraper here.
+        # from src.data_collection.scrape_daily_odds import get_daily_odds
+        # logger.info("Attempting to scrape daily odds now...")
+        # get_daily_odds()
+        # if not odds_file.exists():
+        #     logger.error("Failed to generate odds file. Exiting.")
+        #     return
+        return # For now, we just exit.
+
+    try:
+        odds_df = pd.read_json(odds_file)
+        # The date in the sample file is already a string 'YYYY-MM-DD'
+        # If it were a datetime object, we would format it:
+        # odds_df['game_date'] = pd.to_datetime(odds_df['game_date']).dt.strftime('%Y-%m-%d')
+        logger.info(f"Loaded {len(odds_df)} props from '{odds_file}'.")
+    except Exception as e:
+        logger.error(f"Failed to read or process odds file: {e}")
+        return
+
+    run_predictions_for_odds(odds_df)
+    
 
 if __name__ == "__main__":
     main() 

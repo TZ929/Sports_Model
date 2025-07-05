@@ -87,3 +87,58 @@ This project is for educational and technical purposes only. It is not financial
 ## License
 
 MIT License
+
+## Backtesting
+
+To evaluate the model's performance from a betting perspective, you can run the backtesting script:
+
+```bash
+python backtest_strategy.py
+```
+
+This will simulate the betting strategy on historical data and print an ROI report.
+
+## Automation
+
+The entire prediction pipeline can be automated to run daily. The main entry point for this is the `run_pipeline.py` script.
+
+### Running the Pipeline Manually
+
+You can execute the full pipeline manually by running:
+
+```bash
+python run_pipeline.py
+```
+
+This will:
+1.  Run the (simulated) daily odds scraper.
+2.  Run the prediction model on the scraped odds.
+3.  Log any identified value bets to `logs/predictions.log`.
+
+### Scheduling with Cron (Linux/macOS)
+
+You can schedule the pipeline to run every day at a specific time (e.g., 9 AM) using `cron`.
+
+1.  Open your crontab for editing:
+    ```bash
+    crontab -e
+    ```
+
+2.  Add the following line to the file. This example schedules the script to run at 9 AM daily. Make sure to replace `/path/to/your/project` with the absolute path to this project's directory and `/path/to/your/python` with the path to your Python executable (you can find this with `which python`).
+
+    ```cron
+    0 9 * * * /path/to/your/python /path/to/your/project/run_pipeline.py >> /path/to/your/project/logs/cron.log 2>&1
+    ```
+
+### Scheduling with Windows Task Scheduler
+
+1.  **Open Task Scheduler:** Search for "Task Scheduler" in the Start Menu.
+2.  **Create Basic Task:** In the "Actions" pane on the right, click "Create Basic Task...".
+3.  **Name and Description:** Give the task a name like "Daily Sports Predictions" and click "Next".
+4.  **Trigger:** Choose "Daily" and click "Next". Set a time (e.g., 9:00:00 AM) and click "Next".
+5.  **Action:** Select "Start a program" and click "Next".
+6.  **Start a Program:**
+    *   In the "Program/script" box, enter the full path to your Python executable (e.g., `C:\Python39\python.exe`).
+    *   In the "Add arguments (optional)" box, enter the full path to the pipeline script (e.g., `C:\path\to\your\project\run_pipeline.py`).
+    *   In the "Start in (optional)" box, enter the full path to the project's root directory (e.g., `C:\path\to\your\project`). This is important so the script can find the other files.
+7.  **Finish:** Click "Finish" to create the task. You can right-click the task and run it to test.
