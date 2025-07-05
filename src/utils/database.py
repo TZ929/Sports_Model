@@ -9,6 +9,7 @@ from sqlalchemy.orm import sessionmaker, Session, declarative_base
 from datetime import datetime
 
 from .config import config
+from src.utils.mlb_database_models import Base as MLBBase, MlbTeam, MlbPlayer, MlbGame, MlbBatterStats, MlbPitcherStats
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -181,7 +182,8 @@ class DatabaseManager:
         """Create all database tables."""
         try:
             if self.engine:
-                Base.metadata.create_all(bind=self.engine)
+                Base.metadata.create_all(bind=self.engine) # Creates NBA tables
+                MLBBase.metadata.create_all(bind=self.engine) # Creates MLB tables
                 logger.info("Database tables created successfully")
         except Exception as e:
             logger.error(f"Failed to create database tables: {e}")

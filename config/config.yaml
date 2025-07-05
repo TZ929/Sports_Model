@@ -11,6 +11,10 @@ database:
     username: ""
     password: ""
 
+mlb:
+  api:
+    base_url: "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb"
+
 # Data Sources
 data_sources:
   nba_api:
