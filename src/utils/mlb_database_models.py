@@ -20,6 +20,7 @@ class MlbPlayer(Base):
     full_name = Column(String, nullable=False)
     team_id = Column(String, ForeignKey('mlb_teams.team_id'))
     position = Column(String)
+    throws = Column(String)
     
     team = relationship("MlbTeam")
 
@@ -29,13 +30,15 @@ class MlbGame(Base):
     id = Column(Integer, primary_key=True)
     game_id = Column(String, unique=True, nullable=False)
     game_date = Column(DateTime, nullable=False)
-    season = Column(Integer)
+    season = Column(Integer, nullable=False)
     
-    home_team_id = Column(String, ForeignKey('mlb_teams.team_id'))
-    away_team_id = Column(String, ForeignKey('mlb_teams.team_id'))
+    home_team_id = Column(String, ForeignKey('mlb_teams.team_id'), nullable=False)
+    away_team_id = Column(String, ForeignKey('mlb_teams.team_id'), nullable=False)
     
     home_team_score = Column(Integer)
     away_team_score = Column(Integer)
+    home_starting_pitcher_id = Column(String)
+    away_starting_pitcher_id = Column(String)
     
     home_team = relationship("MlbTeam", foreign_keys=[home_team_id])
     away_team = relationship("MlbTeam", foreign_keys=[away_team_id])

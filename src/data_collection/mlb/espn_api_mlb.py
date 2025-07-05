@@ -87,6 +87,7 @@ class ESPNApiMlb:
                             'full_name': athlete.get('fullName'),
                             'team_abbreviation': team_abbr,
                             'position': position,
+                            'throws': athlete.get('hand', {}).get('type', 'R')[0].upper() # Default to R
                         }
                         all_players.append(player_info)
                 

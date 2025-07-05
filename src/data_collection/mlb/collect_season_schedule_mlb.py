@@ -88,6 +88,6 @@ def collect_mlb_schedule(season: int):
 
 
 if __name__ == '__main__':
-    # Example: Collect data for the 2023 season
-    target_season = 2023
+    # Example: Collect data for the 2025 season
+    target_season = 2025
     collect_mlb_schedule(target_season) 
