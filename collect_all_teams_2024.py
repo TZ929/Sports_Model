@@ -121,9 +121,11 @@ class AllTeamsCollector:
                     if game_date.year != 2024 and game_date.year != 2023:
                         continue
                     
-                    opponent = cells[1].get_text(strip=True)
-                    result = cells[2].get_text(strip=True)
                     minutes = self._parse_minutes(cells[3].get_text(strip=True))
+                    
+                    # Skip if no minutes recorded (usually indicates DNP)
+                    if minutes is None:
+                        continue
                     
                     # Parse shooting stats (FG, 3PT, FT)
                     fg_str = cells[4].get_text(strip=True)
@@ -344,23 +346,22 @@ class AllTeamsCollector:
         """Print comprehensive collection summary."""
         
         print(f"\n{'='*80}")
-        print(f"2023-2024 SEASON DATA COLLECTION COMPLETE")
+        print("2023-2024 SEASON DATA COLLECTION COMPLETE")
         print(f"{'='*80}")
         
-        print(f"\n📊 OVERALL STATISTICS:")
+        print("\n📊 OVERALL STATISTICS:")
         print(f"  Teams processed: {len(results)}")
         print(f"  Successful teams: {self.session_stats['successful_teams']}")
         print(f"  Failed teams: {self.session_stats['failed_teams']}")
-        print(f"  Total players: {self.session_stats['total_players']}")
-        print(f"  Total game stats: {self.session_stats['total_stats']}")
+        print(f"  Total games collected: {self.session_stats['total_stats']}")
         
-        print(f"\n🏆 TOP PERFORMING TEAMS:")
+        print("\n🏆 TOP PERFORMING TEAMS:")
         # Sort by stats collected
         sorted_results = sorted(results, key=lambda x: x['stats'], reverse=True)
         for i, result in enumerate(sorted_results[:10]):
             print(f"  {i+1}. {result['team']}: {result['stats']} stats ({result['players']} players)")
         
-        print(f"\n📈 TEAM BREAKDOWN:")
+        print("\n📈 TEAM BREAKDOWN:")
         for result in sorted_results:
             print(f"  {result['team']}: {result['stats']} stats, {result['players']} players")
         

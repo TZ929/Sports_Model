@@ -2,7 +2,6 @@
 Configuration management utilities for the NBA/WNBA predictive model.
 """
 
-import os
 import yaml
 from pathlib import Path
 from typing import Dict, Any

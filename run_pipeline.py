@@ -17,7 +17,7 @@ from src.feature_engineering.team_features import TeamFeatures
 from src.data_collection.sports_game_odds_api import SportsGameOddsAPICollector
 from src.utils.config import config
 from sqlalchemy import text, func
-from typing import Dict, List, Any, Optional
+from typing import Dict
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

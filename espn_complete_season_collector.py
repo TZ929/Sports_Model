@@ -315,14 +315,14 @@ class ESPNCompleteSeasonCollector:
                 # Only collect 2023-2024 season data
                 if game_date.year == 2023 and game_date.month < 10:
                     continue  # Skip pre-season 2023
-                if game_date.year == 2024 and game_date.month > 4:
-                    continue  # Skip post-season 2024
                 if game_date.year not in [2023, 2024]:
                     continue  # Skip other years
-                
-                opponent = cells[1].get_text(strip=True)
-                result = cells[2].get_text(strip=True)
+
                 minutes = self._parse_minutes(cells[3].get_text(strip=True))
+
+                # Skip if no minutes recorded (usually indicates DNP)
+                if minutes is None:
+                    continue
                 
                 # Parse shooting stats
                 fg_str = cells[4].get_text(strip=True)

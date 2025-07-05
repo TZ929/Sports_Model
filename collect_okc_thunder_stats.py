@@ -104,9 +104,11 @@ class OKCThunderCollector:
                     if not game_date:
                         continue
                     
-                    opponent = cells[1].get_text(strip=True)
-                    result = cells[2].get_text(strip=True)
                     minutes = self._parse_minutes(cells[3].get_text(strip=True))
+                    
+                    # Skip if no minutes recorded (usually indicates DNP)
+                    if minutes is None:
+                        continue
                     
                     # Parse shooting stats (FG, 3PT, FT)
                     fg_str = cells[4].get_text(strip=True)  # e.g., "8-15"
@@ -282,7 +284,7 @@ def main():
     
     # Show summary
     print(f"\n{'='*50}")
-    print(f"OKC THUNDER COLLECTION SUMMARY")
+    print("OKC THUNDER COLLECTION SUMMARY")
     print(f"{'='*50}")
     print(f"Players processed: {results['players']}")
     print(f"Total game stats: {results['stats']}")

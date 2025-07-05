@@ -110,7 +110,7 @@ class SeasonDataVerifier:
                     
                     time.sleep(1)
                     
-                except Exception as e:
+                except Exception:
                     continue
             
             print(f"Total unique games collected: {len(all_games)}")
@@ -210,7 +210,7 @@ class SeasonDataVerifier:
                 
                 games.append(game)
                 
-            except (ValueError, IndexError) as e:
+            except (ValueError, IndexError):
                 continue
         
         return games
@@ -279,15 +279,15 @@ class SeasonDataVerifier:
             months[month_key] = months.get(month_key, 0) + 1
         
         # Show breakdown
-        print(f"\nGame Types:")
+        print("\nGame Types:")
         for game_type, count in sorted(game_types.items()):
             print(f"  {game_type}: {count} games")
         
-        print(f"\nSeasons:")
+        print("\nSeasons:")
         for season, count in sorted(seasons.items()):
             print(f"  {season}: {count} games")
         
-        print(f"\nMonths:")
+        print("\nMonths:")
         for month, count in sorted(months.items()):
             print(f"  {month}: {count} games")
         
@@ -395,9 +395,9 @@ class SeasonDataVerifier:
             print("⚠️ No published count available for comparison")
         
         # Show expected ranges
-        print(f"\n📋 EXPECTED RANGES:")
-        print(f"Regular season: 60-82 games (most players)")
-        print(f"Playoffs: 0-28 games (depends on team success)")
+        print("\n📋 EXPECTED RANGES:")
+        print("Regular season: 60-82 games (most players)")
+        print("Playoffs: 0-28 games (depends on team success)")
         print(f"Total 2023-24 season: {our_regular_count + our_playoff_count} games")
     
     def _parse_espn_date(self, date_str: str) -> Optional[datetime]:

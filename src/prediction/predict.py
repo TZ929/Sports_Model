@@ -7,7 +7,7 @@ import sys
 # Add project root to the Python path
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
-from src.utils.database import db_manager, PlayerGameStats, Games, Players
+from src.utils.database import db_manager
 from src.feature_engineering.player_features import PlayerFeatures
 from src.feature_engineering.game_features import GameFeatures
 from src.feature_engineering.team_features import TeamFeatures

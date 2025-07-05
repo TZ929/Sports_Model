@@ -65,7 +65,7 @@ class ESPNCompleteTeamScheduleCollector:
         """Collect complete schedules for all 30 NBA teams."""
         
         print(f"\n{'='*80}")
-        print(f"COLLECTING COMPLETE 2023-24 SEASON SCHEDULES FOR ALL 30 TEAMS")
+        print("COLLECTING COMPLETE 2023-24 SEASON SCHEDULES FOR ALL 30 TEAMS")
         print(f"{'='*80}")
         
         all_teams_data = {}
@@ -93,7 +93,7 @@ class ESPNCompleteTeamScheduleCollector:
         
         # Summary
         print(f"\n{'='*80}")
-        print(f"FINAL SUMMARY")
+        print("FINAL SUMMARY")
         print(f"{'='*80}")
         print(f"Teams with complete schedules: {successful_teams}/30")
         print(f"Total regular season games collected: {total_games}")
@@ -109,19 +109,19 @@ class ESPNCompleteTeamScheduleCollector:
         all_games = []
         
         # Approach 1: Direct team schedule page
-        print(f"🔍 Approach 1: Direct team schedule...")
+        print("🔍 Approach 1: Direct team schedule...")
         direct_games = self._get_direct_team_schedule(team_abbr)
         all_games.extend(direct_games)
         print(f"  Direct games: {len(direct_games)}")
         
         # Approach 2: Try different season parameters
-        print(f"🔍 Approach 2: Season parameters...")
+        print("🔍 Approach 2: Season parameters...")
         season_games = self._get_season_parameter_schedule(team_abbr)
         all_games.extend(season_games)
         print(f"  Season games: {len(season_games)}")
         
         # Approach 3: Try API endpoints
-        print(f"🔍 Approach 3: API endpoints...")
+        print("🔍 Approach 3: API endpoints...")
         api_games = self._get_api_schedule(team_abbr)
         all_games.extend(api_games)
         print(f"  API games: {len(api_games)}")
@@ -179,7 +179,7 @@ class ESPNCompleteTeamScheduleCollector:
                 
                 time.sleep(0.5)
                 
-            except Exception as e:
+            except Exception:
                 continue
         
         return all_games
@@ -208,7 +208,7 @@ class ESPNCompleteTeamScheduleCollector:
                         if game:
                             all_games.append(game)
                 
-            except Exception as e:
+            except Exception:
                 continue
         
         return all_games
@@ -285,7 +285,7 @@ class ESPNCompleteTeamScheduleCollector:
                 
                 games.append(game)
                 
-            except Exception as e:
+            except Exception:
                 continue
         
         return games
@@ -324,7 +324,7 @@ class ESPNCompleteTeamScheduleCollector:
                     except json.JSONDecodeError:
                         continue
         
-        except Exception as e:
+        except Exception:
             pass
         
         return games
@@ -363,7 +363,7 @@ class ESPNCompleteTeamScheduleCollector:
             
             return game
             
-        except Exception as e:
+        except Exception:
             return None
     
     def _remove_duplicate_games(self, games: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -421,7 +421,7 @@ class ESPNCompleteTeamScheduleCollector:
         # Show expected vs actual
         expected = 82
         actual = categorized_games['regular_season_count']
-        print(f"\n📈 EXPECTED VS ACTUAL:")
+        print("\n📈 EXPECTED VS ACTUAL:")
         print(f"Expected: {expected} games")
         print(f"Actual: {actual} games")
         print(f"Difference: {actual - expected:+d}")
@@ -470,7 +470,7 @@ def main():
     all_teams_data = collector.collect_all_team_schedules()
     
     # Save results
-    print(f"\n💾 SAVING RESULTS...")
+    print("\n💾 SAVING RESULTS...")
     
     # Create summary report
     summary = {

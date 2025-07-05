@@ -132,7 +132,7 @@ class ESPNComplete202324Collector:
                 soup = BeautifulSoup(response.content, 'html.parser')
                 
                 if "Page Not Found" in soup.get_text() or "404" in soup.get_text():
-                    print(f"    Page not found")
+                    print("    Page not found")
                     continue
                 
                 # Find game log table
@@ -183,7 +183,7 @@ class ESPNComplete202324Collector:
                 soup = BeautifulSoup(response.content, 'html.parser')
                 
                 if "Page Not Found" in soup.get_text() or "404" in soup.get_text():
-                    print(f"    Page not found")
+                    print("    Page not found")
                     continue
                 
                 # Find game log table
@@ -304,7 +304,7 @@ class ESPNComplete202324Collector:
                 
                 games.append(game)
                 
-            except (ValueError, IndexError) as e:
+            except (ValueError, IndexError):
                 continue
         
         return games
@@ -365,7 +365,7 @@ class ESPNComplete202324Collector:
         # Show regular season details
         if categorized_games['regular_season_games']:
             reg_games = categorized_games['regular_season_games']
-            print(f"\n✅ 2023-24 REGULAR SEASON:")
+            print("\n✅ 2023-24 REGULAR SEASON:")
             print(f"Date range: {reg_games[0]['game_date'].strftime('%Y-%m-%d')} to {reg_games[-1]['game_date'].strftime('%Y-%m-%d')}")
             
             # Show monthly breakdown
@@ -381,12 +381,12 @@ class ESPNComplete202324Collector:
         # Show playoff details
         if categorized_games['playoff_games']:
             playoff_games = categorized_games['playoff_games']
-            print(f"\n🏆 2023-24 PLAYOFFS:")
+            print("\n🏆 2023-24 PLAYOFFS:")
             print(f"Date range: {playoff_games[0]['game_date'].strftime('%Y-%m-%d')} to {playoff_games[-1]['game_date'].strftime('%Y-%m-%d')}")
         
         # Show expected vs actual
-        print(f"\n📈 EXPECTED VS ACTUAL:")
-        print(f"Expected regular season: 60-82 games")
+        print("\n📈 EXPECTED VS ACTUAL:")
+        print("Expected regular season: 60-82 games")
         print(f"Actual regular season: {categorized_games['regular_season_count']} games")
         
         if categorized_games['regular_season_count'] < 60:

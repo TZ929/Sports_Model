@@ -10,7 +10,6 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 import re
 import time
-import json
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -154,7 +153,7 @@ class ESPNFinalCollector:
                 
                 # Check if page exists
                 if "Page Not Found" in soup.get_text() or "404" in soup.get_text():
-                    print(f"    Page not found")
+                    print("    Page not found")
                     continue
                 
                 # Find game log table
@@ -292,10 +291,12 @@ class ESPNFinalCollector:
                     continue  # Skip post-season 2024
                 if game_date.year not in [2023, 2024]:
                     continue  # Skip other years
-                
-                opponent = cells[1].get_text(strip=True)
-                result = cells[2].get_text(strip=True)
+
                 minutes = self._parse_minutes(cells[3].get_text(strip=True))
+
+                # Skip if no minutes recorded (usually indicates DNP)
+                if minutes is None:
+                    continue
                 
                 # Parse shooting stats
                 fg_str = cells[4].get_text(strip=True)
@@ -352,7 +353,7 @@ class ESPNFinalCollector:
                 
                 stats.append(game_stat)
                 
-            except (ValueError, IndexError) as e:
+            except (ValueError, IndexError):
                 continue
         
         return stats
@@ -407,7 +408,7 @@ class ESPNFinalCollector:
                     
                     stats.append(game_stat)
                     
-            except Exception as e:
+            except Exception:
                 continue
         
         return stats

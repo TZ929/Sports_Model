@@ -156,7 +156,7 @@ class ESPNTeamScheduleCollector:
                 if game_info:
                     games.append(game_info)
                 
-            except Exception as e:
+            except Exception:
                 continue
         
         return games
@@ -204,7 +204,7 @@ class ESPNTeamScheduleCollector:
             
             return game
             
-        except Exception as e:
+        except Exception:
             return None
     
     def _remove_duplicate_games(self, games: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -258,7 +258,7 @@ class ESPNTeamScheduleCollector:
         # Show regular season details
         if categorized_games['regular_season_games']:
             reg_games = categorized_games['regular_season_games']
-            print(f"\n✅ 2023-24 REGULAR SEASON:")
+            print("\n✅ 2023-24 REGULAR SEASON:")
             print(f"Date range: {reg_games[0]['game_date'].strftime('%Y-%m-%d')} to {reg_games[-1]['game_date'].strftime('%Y-%m-%d')}")
             
             # Show monthly breakdown
@@ -274,12 +274,12 @@ class ESPNTeamScheduleCollector:
         # Show playoff details
         if categorized_games['playoff_games']:
             playoff_games = categorized_games['playoff_games']
-            print(f"\n🏆 2023-24 PLAYOFFS:")
+            print("\n🏆 2023-24 PLAYOFFS:")
             print(f"Date range: {playoff_games[0]['game_date'].strftime('%Y-%m-%d')} to {playoff_games[-1]['game_date'].strftime('%Y-%m-%d')}")
         
         # Show expected vs actual
-        print(f"\n📈 EXPECTED VS ACTUAL:")
-        print(f"Expected regular season: 82 games")
+        print("\n📈 EXPECTED VS ACTUAL:")
+        print("Expected regular season: 82 games")
         print(f"Actual regular season: {categorized_games['regular_season_count']} games")
         
         if categorized_games['regular_season_count'] < 80:

@@ -3,7 +3,6 @@ Test script to check NBA API connectivity.
 """
 
 import requests
-import time
 from src.utils.config import config
 
 def test_nba_api():

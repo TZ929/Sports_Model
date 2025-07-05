@@ -6,11 +6,10 @@ import logging
 import time
 import requests
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List, Any, Optional
 from pathlib import Path
 from bs4 import BeautifulSoup
-import re
 
 from ..utils.config import config
 from ..utils.database import db_manager

@@ -35,7 +35,7 @@ def investigate_espn_pagination(player_id: str, player_name: str):
         soup = BeautifulSoup(response.content, 'html.parser')
         
         # Check for pagination elements
-        print(f"\n🔍 SEARCHING FOR PAGINATION ELEMENTS:")
+        print("\n🔍 SEARCHING FOR PAGINATION ELEMENTS:")
         
         # Look for "Load More" buttons
         load_more_buttons = soup.find_all(text=re.compile(r'load more|show more|view all|see all', re.I))
@@ -76,7 +76,7 @@ def investigate_espn_pagination(player_id: str, player_name: str):
             print(f"  - {text}")
         
         # Check the actual table structure
-        print(f"\n📊 TABLE ANALYSIS:")
+        print("\n📊 TABLE ANALYSIS:")
         tables = soup.find_all('table')
         print(f"Total tables found: {len(tables)}")
         
@@ -87,7 +87,7 @@ def investigate_espn_pagination(player_id: str, player_name: str):
             # Check if this looks like a game log table
             table_text = table.get_text().lower()
             if 'date' in table_text and ('opp' in table_text or 'opponent' in table_text):
-                print(f"  ✅ This looks like a game log table")
+                print("  ✅ This looks like a game log table")
                 
                 # Count actual game rows (excluding headers)
                 game_rows = 0
@@ -107,14 +107,14 @@ def investigate_espn_pagination(player_id: str, player_name: str):
                     # Look for any text suggesting there are more games
                     surrounding_text = table.find_parent().get_text() if table.find_parent() else ""
                     if 'more' in surrounding_text.lower() or 'all' in surrounding_text.lower():
-                        print(f"  🔍 Found text suggesting more data available")
+                        print("  🔍 Found text suggesting more data available")
         
         # Check for any AJAX endpoints or API calls
-        print(f"\n🔌 LOOKING FOR API ENDPOINTS:")
+        print("\n🔌 LOOKING FOR API ENDPOINTS:")
         for script in scripts:
             script_text = script.get_text()
             if 'gamelog' in script_text or 'api' in script_text:
-                print(f"  Found script with potential API references")
+                print("  Found script with potential API references")
                 # Look for URLs in the script
                 urls = re.findall(r'https?://[^\s"\']+', script_text)
                 for url in urls[:3]:
@@ -122,7 +122,7 @@ def investigate_espn_pagination(player_id: str, player_name: str):
                         print(f"    - {url}")
         
         # Check if there's a different URL format we should try
-        print(f"\n🔗 ALTERNATIVE URL FORMATS TO TRY:")
+        print("\n🔗 ALTERNATIVE URL FORMATS TO TRY:")
         alternative_urls = [
             f"https://www.espn.com/nba/player/gamelog/_/id/{player_id}",
             f"https://www.espn.com/nba/player/gamelog/_/id/{player_id}/season/2024/type/1",

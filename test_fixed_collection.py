@@ -111,10 +111,10 @@ def test_player_collection(player_id: str, player_name: str):
                     print(f"Error parsing row: {e}")
                     continue
             
-            print(f"\n📊 RESULTS:")
+            print("\n📊 RESULTS:")
             print(f"  Total games found: {total_games}")
             print(f"  Valid 2023-24 games: {valid_games}")
-            print(f"  Games by year:")
+            print("  Games by year:")
             for year, count in sorted(games_by_year.items()):
                 print(f"    {year}: {count} games")
             
@@ -122,13 +122,13 @@ def test_player_collection(player_id: str, player_name: str):
                 print(f"✅ SUCCESS! Found {valid_games} valid 2023-24 season games")
                 return True
             else:
-                print(f"❌ No valid 2023-24 season games found")
+                print("❌ No valid 2023-24 season games found")
             
         except Exception as e:
             print(f"❌ Error: {e}")
             continue
     
-    print(f"❌ Failed to get valid data from any URL")
+    print("❌ Failed to get valid data from any URL")
     return False
 
 def main():

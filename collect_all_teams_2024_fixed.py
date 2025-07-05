@@ -14,6 +14,7 @@ from sqlalchemy import text
 import time
 import re
 import random
+import json
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -116,92 +117,86 @@ class AllTeamsCollectorFixed:
                 stats = []
                 rows = game_log_table.find_all('tr')
                 
+                # For each game row
                 for row in rows:
-                    # Skip header rows
-                    if 'thead' in str(row.get('class', [])):
+                    cells = row.find_all("td")
+                    if not cells:
+                        continue
+
+                    game_date_str = cells[0].get_text(strip=True)
+                    minutes = self._parse_minutes(cells[3].get_text(strip=True))
+
+                    # Skip if no minutes recorded (usually indicates DNP)
+                    if minutes is None:
                         continue
                     
-                    cells = row.find_all(['td', 'th'])
-                    if len(cells) < 10:  # Need at least basic stats
+                    # Only collect 2023-2024 season data (Oct 2023 - Apr 2024)
+                    game_date = self._parse_espn_date(game_date_str)
+                    if game_date is None:
                         continue
+
+                    if game_date.year == 2023 and game_date.month < 10:
+                        continue  # Skip pre-season 2023
+                    if game_date.year == 2024 and game_date.month > 4:
+                        continue  # Skip post-season 2024
+                    if game_date.year not in [2023, 2024]:
+                        continue  # Skip other years
                     
-                    try:
-                        # Extract game information
-                        game_date = self._parse_espn_date(cells[0].get_text(strip=True))
-                        if not game_date:
-                            continue
-                        
-                        # Only collect 2023-2024 season data (Oct 2023 - Apr 2024)
-                        if game_date.year == 2023 and game_date.month < 10:
-                            continue  # Skip pre-season 2023
-                        if game_date.year == 2024 and game_date.month > 4:
-                            continue  # Skip post-season 2024
-                        if game_date.year not in [2023, 2024]:
-                            continue  # Skip other years
-                        
-                        opponent = cells[1].get_text(strip=True)
-                        result = cells[2].get_text(strip=True)
-                        minutes = self._parse_minutes(cells[3].get_text(strip=True))
-                        
-                        # Parse shooting stats (FG, 3PT, FT)
-                        fg_str = cells[4].get_text(strip=True)
-                        fg_made, fg_attempted = self._parse_shot_attempts(fg_str)
-                        
-                        three_pt_str = cells[6].get_text(strip=True)
-                        three_made, three_attempted = self._parse_shot_attempts(three_pt_str)
-                        
-                        ft_str = cells[8].get_text(strip=True)
-                        ft_made, ft_attempted = self._parse_shot_attempts(ft_str)
-                        
-                        # Other stats
-                        rebounds = int(cells[10].get_text(strip=True)) if cells[10].get_text(strip=True).isdigit() else 0
-                        assists = int(cells[11].get_text(strip=True)) if cells[11].get_text(strip=True).isdigit() else 0
-                        steals = int(cells[12].get_text(strip=True)) if cells[12].get_text(strip=True).isdigit() else 0
-                        blocks = int(cells[13].get_text(strip=True)) if cells[13].get_text(strip=True).isdigit() else 0
-                        turnovers = int(cells[14].get_text(strip=True)) if cells[14].get_text(strip=True).isdigit() else 0
-                        personal_fouls = int(cells[15].get_text(strip=True)) if cells[15].get_text(strip=True).isdigit() else 0
-                        points = int(cells[16].get_text(strip=True)) if cells[16].get_text(strip=True).isdigit() else 0
-                        
-                        # Plus/minus (if available)
-                        plus_minus = 0
-                        if len(cells) > 17:
-                            pm_text = cells[17].get_text(strip=True)
-                            if pm_text and pm_text != '-':
-                                try:
-                                    plus_minus = int(pm_text)
-                                except ValueError:
-                                    plus_minus = 0
-                        
-                        # Create game stat record
-                        game_stat = {
-                            'game_id': f"ESPN_{player_id}_{game_date.strftime('%Y%m%d')}",
-                            'player_id': player_id,
-                            'team_id': team_name[:3].upper(),
-                            'minutes_played': int(minutes) if minutes else 0,
-                            'field_goals_made': fg_made,
-                            'field_goals_attempted': fg_attempted,
-                            'three_pointers_made': three_made,
-                            'three_pointers_attempted': three_attempted,
-                            'free_throws_made': ft_made,
-                            'free_throws_attempted': ft_attempted,
-                            'rebounds': rebounds,
-                            'offensive_rebounds': 0,
-                            'defensive_rebounds': 0,
-                            'assists': assists,
-                            'steals': steals,
-                            'blocks': blocks,
-                            'turnovers': turnovers,
-                            'personal_fouls': personal_fouls,
-                            'points': points,
-                            'plus_minus': plus_minus
-                        }
-                        
-                        stats.append(game_stat)
-                        
-                    except (ValueError, IndexError) as e:
-                        logger.warning(f"Error parsing game stat row for {player_id}: {e}")
-                        continue
-                
+                    # Parse shooting stats (FG, 3PT, FT)
+                    fg_str = cells[4].get_text(strip=True)
+                    fg_made, fg_attempted = self._parse_shot_attempts(fg_str)
+                    
+                    three_pt_str = cells[6].get_text(strip=True)
+                    three_made, three_attempted = self._parse_shot_attempts(three_pt_str)
+                    
+                    ft_str = cells[8].get_text(strip=True)
+                    ft_made, ft_attempted = self._parse_shot_attempts(ft_str)
+                    
+                    # Other stats
+                    rebounds = int(cells[10].get_text(strip=True)) if cells[10].get_text(strip=True).isdigit() else 0
+                    assists = int(cells[11].get_text(strip=True)) if cells[11].get_text(strip=True).isdigit() else 0
+                    steals = int(cells[12].get_text(strip=True)) if cells[12].get_text(strip=True).isdigit() else 0
+                    blocks = int(cells[13].get_text(strip=True)) if cells[13].get_text(strip=True).isdigit() else 0
+                    turnovers = int(cells[14].get_text(strip=True)) if cells[14].get_text(strip=True).isdigit() else 0
+                    personal_fouls = int(cells[15].get_text(strip=True)) if cells[15].get_text(strip=True).isdigit() else 0
+                    points = int(cells[16].get_text(strip=True)) if cells[16].get_text(strip=True).isdigit() else 0
+                    
+                    # Plus/minus (if available)
+                    plus_minus = 0
+                    if len(cells) > 17:
+                        pm_text = cells[17].get_text(strip=True)
+                        if pm_text and pm_text != '-':
+                            try:
+                                plus_minus = int(pm_text)
+                            except ValueError:
+                                plus_minus = 0
+                    
+                    # Create game stat record
+                    game_stat = {
+                        'game_id': f"ESPN_{player_id}_{game_date.strftime('%Y%m%d')}",
+                        'player_id': player_id,
+                        'team_id': team_name[:3].upper(),
+                        'minutes_played': int(minutes) if minutes else 0,
+                        'field_goals_made': fg_made,
+                        'field_goals_attempted': fg_attempted,
+                        'three_pointers_made': three_made,
+                        'three_pointers_attempted': three_attempted,
+                        'free_throws_made': ft_made,
+                        'free_throws_attempted': ft_attempted,
+                        'rebounds': rebounds,
+                        'offensive_rebounds': 0,
+                        'defensive_rebounds': 0,
+                        'assists': assists,
+                        'steals': steals,
+                        'blocks': blocks,
+                        'turnovers': turnovers,
+                        'personal_fouls': personal_fouls,
+                        'points': points,
+                        'plus_minus': plus_minus
+                    }
+                    
+                    stats.append(game_stat)
+                    
                 if stats:
                     logger.info(f"Successfully collected {len(stats)} games from {url}")
                     return stats
@@ -369,23 +364,23 @@ class AllTeamsCollectorFixed:
         """Print comprehensive collection summary."""
         
         print(f"\n{'='*80}")
-        print(f"2023-2024 SEASON DATA COLLECTION COMPLETE (FIXED VERSION)")
+        print("2023-2024 SEASON DATA COLLECTION COMPLETE (FIXED VERSION)")
         print(f"{'='*80}")
         
-        print(f"\n📊 OVERALL STATISTICS:")
+        print("\n📊 OVERALL STATISTICS:")
         print(f"  Teams processed: {len(results)}")
         print(f"  Successful teams: {self.session_stats['successful_teams']}")
         print(f"  Failed teams: {self.session_stats['failed_teams']}")
         print(f"  Total players: {self.session_stats['total_players']}")
         print(f"  Total game stats: {self.session_stats['total_stats']}")
         
-        print(f"\n🏆 TOP PERFORMING TEAMS:")
+        print("\n🏆 TOP PERFORMING TEAMS:")
         # Sort by stats collected
         sorted_results = sorted(results, key=lambda x: x['stats'], reverse=True)
         for i, result in enumerate(sorted_results[:10]):
             print(f"  {i+1}. {result['team']}: {result['stats']} stats ({result['players']} players)")
         
-        print(f"\n📈 TEAM BREAKDOWN:")
+        print("\n📈 TEAM BREAKDOWN:")
         for result in sorted_results:
             print(f"  {result['team']}: {result['stats']} stats, {result['players']} players")
         
@@ -396,12 +391,26 @@ class AllTeamsCollectorFixed:
             if len(self.session_stats['errors']) > 5:
                 print(f"  ... and {len(self.session_stats['errors']) - 5} more errors")
 
+    def save_results(self, results):
+        # Save results to a JSON file
+        with open("all_teams_2024_fixed.json", "w") as f:
+            json.dump(results, f, indent=4)
+        print("💾 Results saved to all_teams_2024_fixed.json")
+
+
 def main():
     """Collect 2023-2024 season data for all teams - FIXED VERSION."""
     
     logger.info("Starting comprehensive 2023-2024 season data collection (FIXED VERSION)...")
     collector = AllTeamsCollectorFixed()
-    collector.collect_all_teams_data()
+    try:
+        collector.collect_all_teams_data()
+
+        print("\n2023-2024 SEASON DATA COLLECTION COMPLETE (FIXED VERSION)")
+        print("==========================================================")
+    except Exception as e:
+        print(f"\n❌ An error occurred: {e}")
+        logging.error(f"An error occurred in main: {e}", exc_info=True)
 
 if __name__ == "__main__":
     main() 

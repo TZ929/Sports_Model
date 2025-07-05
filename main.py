@@ -4,13 +4,10 @@ Main script for the NBA/WNBA predictive model project.
 
 import logging
 import argparse
-from pathlib import Path
 import click
 
 from run_pipeline import run_data_pipeline
 from retrain_model import retrain as retrain_model_pipeline
-from src.utils.config import config
-from src.utils.database import db_manager
 
 # Configure logging
 logging.basicConfig(
@@ -67,7 +64,7 @@ def collect(source):
         'players_with_stats': player_stats_result['successful_players']
     }
     
-    logger.info(f"Data collection completed successfully!")
+    logger.info("Data collection completed successfully!")
     logger.info(f"Final counts: {final_counts}")
 
 @cli.command()
