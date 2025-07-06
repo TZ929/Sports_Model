@@ -282,7 +282,7 @@ def main():
     
     # Show summary
     print(f"\n{'='*50}")
-    print(f"OKC THUNDER COLLECTION SUMMARY")
+    print("OKC THUNDER COLLECTION SUMMARY")
     print(f"{'='*50}")
     print(f"Players processed: {results['players']}")
     print(f"Total game stats: {results['stats']}")

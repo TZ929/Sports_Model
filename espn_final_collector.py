@@ -10,7 +10,6 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 import re
 import time
-import json
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -154,7 +153,7 @@ class ESPNFinalCollector:
                 
                 # Check if page exists
                 if "Page Not Found" in soup.get_text() or "404" in soup.get_text():
-                    print(f"    Page not found")
+                    print("    Page not found")
                     continue
                 
                 # Find game log table
@@ -352,7 +351,7 @@ class ESPNFinalCollector:
                 
                 stats.append(game_stat)
                 
-            except (ValueError, IndexError) as e:
+            except (ValueError, IndexError):
                 continue
         
         return stats
@@ -407,7 +406,7 @@ class ESPNFinalCollector:
                     
                     stats.append(game_stat)
                     
-            except Exception as e:
+            except Exception:
                 continue
         
         return stats

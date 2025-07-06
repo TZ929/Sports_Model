@@ -8,11 +8,7 @@ import logging
 from bs4 import BeautifulSoup
 from datetime import datetime
 from typing import List, Dict, Any, Optional
-from src.utils.database import db_manager
-from sqlalchemy import text
-import time
 import re
-import random
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -55,7 +51,7 @@ class ESPNFullSeasonCollector:
                 print(f"❌ Error with approach {i+1}: {e}")
                 continue
         
-        print(f"❌ Failed to get substantial data from any approach")
+        print("❌ Failed to get substantial data from any approach")
         return []
     
     def _try_espn_api_gamelog(self, player_id: str, player_name: str) -> List[Dict[str, Any]]:

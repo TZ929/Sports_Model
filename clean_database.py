@@ -4,10 +4,7 @@ Clean up database to ensure Phase 2 completion with valid ESPN data only.
 """
 
 import logging
-import requests
-import time
 from src.utils.database import db_manager
-from src.data_collection.espn_api import ESPNAPICollector
 from sqlalchemy import text
 import argparse
 

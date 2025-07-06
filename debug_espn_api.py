@@ -140,7 +140,7 @@ def debug_espn_stats_parsing():
                 event_stats = event.get('stats', [])
                 
                 if len(event_stats) >= 14:
-                    print(f"  Parsed stats:")
+                    print("  Parsed stats:")
                     print(f"    Minutes: {event_stats[0]}")
                     print(f"    FG: {event_stats[1]}")
                     print(f"    3PT: {event_stats[3]}")
@@ -215,8 +215,6 @@ if __name__ == "__main__":
 Debug ESPN API player stats endpoint for a known valid player ID.
 """
 
-import requests
-import json
 
 PLAYER_ID = "3102529"  # Clint Capela
 SEASON = "2024"

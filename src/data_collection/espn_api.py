@@ -5,11 +5,9 @@ ESPN API data collector for NBA statistics.
 import requests
 import time
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from datetime import datetime
 from src.utils.database import db_manager
-from sqlalchemy import text
-from bs4 import BeautifulSoup
 import calendar
 
 logger = logging.getLogger(__name__)

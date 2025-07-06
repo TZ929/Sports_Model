@@ -4,11 +4,9 @@ Web scraper for collecting prop odds from sportsbooks.
 
 import logging
 import time
-import json
 import re
 from datetime import datetime
 from typing import Dict, List, Any, Optional
-from pathlib import Path
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By

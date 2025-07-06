@@ -68,7 +68,7 @@ class ESPNMultiTableCollector:
                         all_stats.append(stat)
                         seen_game_ids.add(game_id)
             
-            print(f"\n📊 FINAL RESULTS:")
+            print("\n📊 FINAL RESULTS:")
             print(f"Total unique games collected: {len(all_stats)}")
             
             if all_stats:

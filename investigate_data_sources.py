@@ -6,7 +6,6 @@ Investigate alternative data sources for complete 2023-24 season data.
 import requests
 import logging
 from bs4 import BeautifulSoup
-import json
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -15,7 +14,7 @@ def test_basketball_reference():
     """Test Basketball Reference for complete season data."""
     
     print(f"\n{'='*60}")
-    print(f"TESTING BASKETBALL REFERENCE")
+    print("TESTING BASKETBALL REFERENCE")
     print(f"{'='*60}")
     
     # Test with a known player
@@ -59,7 +58,7 @@ def test_nba_api():
     """Test NBA API for complete season data."""
     
     print(f"\n{'='*60}")
-    print(f"TESTING NBA API")
+    print("TESTING NBA API")
     print(f"{'='*60}")
     
     # Test with a known player ID
@@ -102,7 +101,7 @@ def test_espn_api():
     """Test ESPN API for complete season data."""
     
     print(f"\n{'='*60}")
-    print(f"TESTING ESPN API")
+    print("TESTING ESPN API")
     print(f"{'='*60}")
     
     # Test with a known player ID
@@ -163,14 +162,14 @@ def main():
             results[source_name] = False
     
     print(f"\n{'='*60}")
-    print(f"SUMMARY")
+    print("SUMMARY")
     print(f"{'='*60}")
     
     for source_name, success in results.items():
         status = "✅ WORKING" if success else "❌ FAILED"
         print(f"{source_name}: {status}")
     
-    print(f"\nRECOMMENDATIONS:")
+    print("\nRECOMMENDATIONS:")
     if results.get("Basketball Reference", False):
         print("✅ Basketball Reference appears to have complete season data")
         print("   - Consider using Basketball Reference scraper")

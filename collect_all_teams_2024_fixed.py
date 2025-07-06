@@ -369,23 +369,23 @@ class AllTeamsCollectorFixed:
         """Print comprehensive collection summary."""
         
         print(f"\n{'='*80}")
-        print(f"2023-2024 SEASON DATA COLLECTION COMPLETE (FIXED VERSION)")
+        print("2023-2024 SEASON DATA COLLECTION COMPLETE (FIXED VERSION)")
         print(f"{'='*80}")
         
-        print(f"\n📊 OVERALL STATISTICS:")
+        print("\n📊 OVERALL STATISTICS:")
         print(f"  Teams processed: {len(results)}")
         print(f"  Successful teams: {self.session_stats['successful_teams']}")
         print(f"  Failed teams: {self.session_stats['failed_teams']}")
         print(f"  Total players: {self.session_stats['total_players']}")
         print(f"  Total game stats: {self.session_stats['total_stats']}")
         
-        print(f"\n🏆 TOP PERFORMING TEAMS:")
+        print("\n🏆 TOP PERFORMING TEAMS:")
         # Sort by stats collected
         sorted_results = sorted(results, key=lambda x: x['stats'], reverse=True)
         for i, result in enumerate(sorted_results[:10]):
             print(f"  {i+1}. {result['team']}: {result['stats']} stats ({result['players']} players)")
         
-        print(f"\n📈 TEAM BREAKDOWN:")
+        print("\n📈 TEAM BREAKDOWN:")
         for result in sorted_results:
             print(f"  {result['team']}: {result['stats']} stats, {result['players']} players")
         

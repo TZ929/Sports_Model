@@ -46,7 +46,7 @@ def test_player_urls():
                     game_count = len([r for r in rows if 'thead' not in r.get('class', [])])
                     print(f"     Found {game_count} games")
                 else:
-                    print(f"     No game table found")
+                    print("     No game table found")
             else:
                 print(f"  ❌ 2024: {response.status_code}")
         except Exception as e:
@@ -65,7 +65,7 @@ def test_player_urls():
                     game_count = len([r for r in rows if 'thead' not in r.get('class', [])])
                     print(f"     Found {game_count} games")
                 else:
-                    print(f"     No game table found")
+                    print("     No game table found")
             else:
                 print(f"  ❌ 2023: {response.status_code}")
         except Exception as e:

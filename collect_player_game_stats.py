@@ -5,7 +5,6 @@ import threading
 from src.data_collection.espn_api import ESPNAPICollector
 from src.utils.database import db_manager
 from sqlalchemy import text
-from typing import List
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 

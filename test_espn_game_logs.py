@@ -46,7 +46,7 @@ try:
                     
                     # If we see date-like headers, this might be our table
                     if any('date' in h.lower() or 'opp' in h.lower() for h in headers):
-                        print(f"  This looks like a game log table!")
+                        print("  This looks like a game log table!")
                         print(f"  Number of rows: {len(rows)}")
                         
                         # Show first few data rows

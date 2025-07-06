@@ -1,7 +1,6 @@
 import logging
 from fuzzywuzzy import process
-import pandas as pd
-from typing import Optional, Dict, List
+from typing import Optional, Dict
 
 # Add project root to path to allow imports
 import sys

@@ -4,7 +4,7 @@ Script to check what data we have in the database.
 
 import logging
 from src.utils.database import db_manager, Teams, Players, Games, PlayerGameStats
-from sqlalchemy import text, func
+from sqlalchemy import func
 from pathlib import Path
 
 # Setup logging to file
