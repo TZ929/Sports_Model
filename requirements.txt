@@ -44,3 +44,5 @@ scipy==1.13.1
 optuna>=3.5.0 
 fuzzywuzzy==0.18.0 
 python-levenshtein==0.25.1 
+html5lib>=1.1
+lxml>=4.9 
