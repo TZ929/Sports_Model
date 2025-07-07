@@ -226,6 +226,15 @@ class SimpleRealMasterDatasetBuilder:
         conn = sqlite3.connect(str(self.db_path))
         
         try:
+            # First, get team ID mapping from numeric IDs to abbreviations
+            logger.info("Creating team ID mapping...")
+            team_mapping_query = """
+                SELECT team_id, team_abbreviation
+                FROM mlb_teams
+            """
+            team_mapping = pd.read_sql(team_mapping_query, conn)
+            team_mapping['team_id'] = team_mapping['team_id'].astype(str)  # Ensure string type
+            
             # Get team batting averages
             logger.info("Calculating team batting statistics...")
             batting_query = """
@@ -247,6 +256,7 @@ class SimpleRealMasterDatasetBuilder:
             """
             
             batting_stats = pd.read_sql(batting_query, conn)
+            batting_stats['team_id'] = batting_stats['team_id'].astype(str)  # Ensure string type
             
             # Get team pitching averages
             logger.info("Calculating team pitching statistics...")
@@ -268,6 +278,15 @@ class SimpleRealMasterDatasetBuilder:
             """
             
             pitching_stats = pd.read_sql(pitching_query, conn)
+            pitching_stats['team_id'] = pitching_stats['team_id'].astype(str)  # Ensure string type
+            
+            # Convert numeric team IDs to abbreviations
+            batting_stats = batting_stats.merge(team_mapping, on='team_id', how='left')
+            pitching_stats = pitching_stats.merge(team_mapping, on='team_id', how='left')
+            
+            # Drop the numeric team_id and rename abbreviation to team_id
+            batting_stats = batting_stats.drop('team_id', axis=1).rename(columns={'team_abbreviation': 'team_id'})
+            pitching_stats = pitching_stats.drop('team_id', axis=1).rename(columns={'team_abbreviation': 'team_id'})
             
             # Merge batting stats for home teams
             df = df.merge(

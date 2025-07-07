@@ -1,0 +1,16 @@
+{
+  "best_params": {
+    "n_estimators": 279,
+    "learning_rate": 0.023068907258705567,
+    "num_leaves": 124,
+    "max_depth": 4,
+    "min_child_samples": 13,
+    "subsample": 0.8903493437996597,
+    "colsample_bytree": 0.9281822875718054,
+    "reg_alpha": 0.0001266902659265063,
+    "reg_lambda": 5.2158755750753646e-08
+  },
+  "best_validation_score": 0.5490366539607529,
+  "model_type": "LightGBM",
+  "target": "close_game"
+}

@@ -1,0 +1,15 @@
+{
+  "best_params": {
+    "n_estimators": 109,
+    "learning_rate": 0.017545858781393888,
+    "max_depth": 4,
+    "min_child_weight": 4,
+    "subsample": 0.8339806760360845,
+    "colsample_bytree": 0.7564445962463444,
+    "reg_alpha": 0.4058604227298677,
+    "reg_lambda": 0.42969548475522135
+  },
+  "best_validation_score": 0.5444855590973601,
+  "model_type": "XGBoost",
+  "target": "close_game"
+}

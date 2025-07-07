@@ -1,0 +1,39 @@
+
+=== MLB PREDICTION PIPELINE LARGE-SCALE TEST REPORT ===
+Generated: 2025-07-07 00:21:09
+
+OVERALL PERFORMANCE:
+- Total Games Tested: 2,000
+- Prediction Accuracy: 58.1%
+- ROC AUC Score: 0.6363
+- Correct Predictions: 1,162
+
+SPORTSBOOK PERFORMANCE:
+- Recommended Bets: 918 (45.9% of games)
+- Betting Accuracy: 66.9%
+- Average Edge: 9.7%
+- Average Confidence: 19.4%
+
+HOME FIELD ADVANTAGE:
+- Actual Home Win Rate: 53.9%
+- Predicted Home Win Rate: 47.6%
+- Home Bias: 6.3%
+
+CONFIDENCE ANALYSIS:
+- Mean Confidence: 11.4%
+- Std Confidence: 9.5%
+- Min Confidence: 0.0%
+- Max Confidence: 55.4%
+
+ERROR ANALYSIS:
+- Total Errors: 0
+- Success Rate: 100.0%
+
+PERFORMANCE BENCHMARKS:
+- Random Chance Accuracy: 50.0%
+- Random Chance AUC: 0.5000
+- Sportsbook Break-even: ~52.4% (accounting for juice)
+
+VERDICT:
+🎉 EXCELLENT - Sportsbook-beating performance achieved!
+🎯 BETTING STRATEGY: High-confidence bets show strong performance!
